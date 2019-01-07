@@ -11,7 +11,7 @@ class ElectricalHeater(ThermalEntity, ElectricalEntity, eh.ElectricalHeater):
     """
 
     def __init__(self, environment, P_Th_Nom, eta=1,
-                 tMax=85, lowerActivationLimit=1):
+                 tMax=85, lowerActivationLimit=0):
         super(ElectricalHeater, self).__init__(environment.timer, environment,
                                                P_Th_Nom, eta, tMax,
                                                lowerActivationLimit)
@@ -34,9 +34,17 @@ class ElectricalHeater(ThermalEntity, ElectricalEntity, eh.ElectricalHeater):
         ThermalEntity.populate_model(self, model, mode)
         ElectricalEntity.populate_model(self, model, mode)
 
-        for var in self.P_Th_vars:
-            var.lb = -self.P_Th_Nom
-            var.ub = 0
+        if self.lowerActivationLimit != 0:
+            for t in self.OP_TIME_VEC:
+                self.P_Th_vars[t].lb = -gurobi.GRB.INFINITY
+                op_status = model.addVar(vtype=gurobi.GRB.BINARY, name="%s_P_Op_b_t=%i" % (self._long_ID, t + 1))
+                op_range = model.addVar(vtype=gurobi.GRB.CONTINUOUS, lb=self.lowerActivationLimit, ub=1,
+                                        name="%s_P_Op_d_t=%i" % (self._long_ID, t + 1))
+                model.addConstr(op_status*op_range*self.P_Th_Nom == -self.P_Th_vars[t])
+        else:
+            for var in self.P_Th_vars:
+                var.lb = -self.P_Th_Nom
+                var.ub = 0
 
         for t in self.OP_TIME_VEC:
             model.addConstr(
