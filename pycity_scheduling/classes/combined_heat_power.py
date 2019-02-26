@@ -11,17 +11,40 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
     Extension of pycity class CHP for scheduling purposes.
     """
 
-    def __init__(self, environment, P_Th_Nom, P_El_Nom, eta, tMax=85,
+    def __init__(self, environment, P_Th_Nom, P_El_Nom=0, eta=1, tMax=85,
                  lowerActivationLimit=0):
-        p_nominal = P_El_Nom / 1000
-        q_nominal = P_Th_Nom / 1000
+        """Initialize CombinedHeatPower.
+
+        Parameters
+        ----------
+        environment : pycity_scheduling.classes.Environment
+            Common to all other objects. Includes time and weather instances.
+        P_Th_Nom : float
+            Nominal thermal power output in [kW].
+        P_El_Nom : float, optional
+            Nominal electrical power output in [kW]. Defaults to `P_Th_Nom`.
+        eta : float, optional
+            Total efficiency of the CHP.
+        tMax : integer, optional
+            maximum provided temperature in °C
+        lowerActivationLimit : float (0 <= lowerActivationLimit <= 1)
+            Define the lower activation limit. For example, heat pumps are
+            typically able to operate between 50 % part load and rated load.
+            In this case, lowerActivationLimit would be 0.5
+            Two special cases:
+            Linear behavior: lowerActivationLimit = 0
+            Two-point controlled: lowerActivationLimit = 1
+        """
+        q_nominal = P_Th_Nom * 1000
+        if P_El_Nom is None:
+            p_nominal = q_nominal
+        else:
+            p_nominal = P_El_Nom * 1000
+
         super(CombinedHeatPower, self).__init__(environment.timer, environment,
                                                 p_nominal, q_nominal, eta,
                                                 tMax, lowerActivationLimit)
         self._long_ID = "CHP_" + self._ID_string
-
-        self.P_Th_Nom = P_Th_Nom
-        self.P_El_Nom = P_El_Nom
 
     def populate_model(self, model, mode=""):
         """Add variables and constraints to Gurobi model.
@@ -40,19 +63,19 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         ElectricalEntity.populate_model(self, model, mode)
 
         if self.lowerActivationLimit != 0:
-            for t in self.OP_TIME_VEC:
+            for t in self.op_time_vec:
                 self.P_Th_vars[t].lb = -gurobi.GRB.INFINITY
                 self.P_El_vars[t].lb = -gurobi.GRB.INFINITY
                 op_status = model.addVar(vtype=gurobi.GRB.BINARY, name="%s_P_Op_b_t=%i" % (self._long_ID, t + 1))
                 op_range = model.addVar(vtype=gurobi.GRB.CONTINUOUS, lb=self.lowerActivationLimit, ub=1,
                                         name="%s_P_Op_d_t=%i" % (self._long_ID, t + 1))
-                model.addConstr(op_status*op_range*self.P_Th_Nom == -self.P_Th_vars[t])
+                model.addConstr(op_status*op_range*self.qNominal / 1000 == -self.P_Th_vars[t])
         else:
             for var in self.P_Th_vars:
-                var.lb = -self.P_Th_Nom
+                var.lb = -self.qNominal / 1000
                 var.ub = 0
             for var in self.P_El_vars:
-                var.lb = -self.P_El_Nom
+                var.lb = -self.pNominal / 1000
                 var.ub = 0
 
         # original function
@@ -61,15 +84,15 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         #     -0.2434*(self.P_Th_vars[t]/self.P_Th_Nom)**2
         #     +1.1856*(self.P_Th_vars[t]/self.P_Th_Nom)
         #     +0.0487
-        #     for t in self.OP_TIME_VEC
+        #     for t in self.op_time_vec
         # ]
         # function linearised with quadratic regression over the interval
         # [0, 1]
         # COP = [
         #     0.9422 * self.P_Th_vars[t] * (1 / self.P_Th_Nom) + 0.0889
-        #     for t in self.OP_TIME_VEC
+        #     for t in self.op_time_vec
         #     ]
-        for t in self.OP_TIME_VEC:
+        for t in self.op_time_vec:
             model.addConstr(
                 self.P_Th_vars[t] * self.sigma == self.P_El_vars[t]
             )
@@ -92,7 +115,7 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         """
         obj = gurobi.LinExpr()
         obj.addTerms(
-            [coeff] * self.OP_HORIZON,
+            [coeff] * self.op_horizon,
             self.P_El_vars
         )
         return obj
@@ -143,6 +166,8 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
             p = self.P_Th_Schedule
         if timestep:
             p = p[:timestep]
-        co2 = ElectricalEntity.calculate_co2(self, timestep, reference)
-        co2 -= sum(p) * self.TIME_SLOT * CO2_EMISSIONS_GAS
+        co2 = ElectricalEntity.calculate_co2(self, timestep,
+                                             co2_emissions, reference)
+        co2 -= (sum(p) * self.time_slot / (1 + self.sigma)
+                * CO2_EMISSIONS_GAS / self.omega)
         return co2

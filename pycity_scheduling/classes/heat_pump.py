@@ -18,8 +18,8 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
 
         Parameters
         ----------
-        environment : Environment
-            Common Environment instance.
+        environment : pycity_scheduling.classes.Environment
+            Common to all other objects. Includes time and weather instances.
         P_Th_Nom : float
             Nominal thermal power of the heatpump in [kW].
         hp_type : {"aw", "ww"}
@@ -38,19 +38,20 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
         heat
         power
         """
+        simu_horizon = environment.timer.simu_horizon
         if tAmbient is None:
             if hp_type == "aw":
                 (tAmbient,) = environment.weather.getWeatherForecast(
                     getTAmbient=True
                 )
                 ts = environment.timer.time_in_year()
-                tAmbient = tAmbient[ts:ts+self.SIMU_HORIZON]
+                tAmbient = tAmbient[ts:ts+simu_horizon]
             else:
-                tAmbient = np.full(self.SIMU_HORIZON, 283)
+                tAmbient = np.full(simu_horizon, 283)
         if cop is None:
             relative_COP = (0.36 if hp_type == "aw" else 0.5)
             cop = [relative_COP * (tFlow + 273) / (tFlow - tAmbient[t])
-                   for t in self.SIMU_TIME_VEC]  # TODO: better implementation
+                   for t in range(simu_horizon)]  # TODO: better implementation
         super(HeatPump, self).__init__(environment.timer, environment,
                                        tAmbient, tFlow, heat, power, cop, tMax,
                                        lowerActivationLimit)
@@ -76,7 +77,7 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
         ElectricalEntity.populate_model(self, model, mode)
 
         if self.lowerActivationLimit != 0:
-            for t in self.OP_TIME_VEC:
+            for t in self.op_time_vec:
                 self.P_Th_vars[t].lb = -gurobi.GRB.INFINITY
                 op_status = model.addVar(vtype=gurobi.GRB.BINARY, name="%s_P_Op_b_t=%i" % (self._long_ID, t + 1))
                 op_range = model.addVar(vtype=gurobi.GRB.CONTINUOUS, lb=self.lowerActivationLimit, ub=1,
@@ -93,7 +94,7 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
             for var in self.P_Th_vars:
                 var.lb = -self.P_Th_Nom
                 var.ub = 0
-            for t in self.OP_TIME_VEC:
+            for t in self.op_time_vec:
                 model.addConstr(
                     -self.P_Th_vars[t] == self.COP[t] * self.P_El_vars[t],
                     "{0:s}_Th_El_coupl_at_t={1}".format(self._long_ID, t)
@@ -121,7 +122,7 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
         """
         obj = gurobi.LinExpr()
         obj.addTerms(
-            [coeff] * self.OP_HORIZON,
+            [coeff] * self.op_horizon,
             self.P_El_vars
         )
         return obj
