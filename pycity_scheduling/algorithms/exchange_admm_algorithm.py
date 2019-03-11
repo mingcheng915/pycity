@@ -7,7 +7,7 @@ from pycity_scheduling.util import populate_models
 
 
 def exchange_admm(city_district, models=None, beta=1.0, eps_primal=0.1,
-                  eps_dual=1.0, rho=2.0, max_iterations=10000):
+                  eps_dual=1.0, rho=2.0, max_iterations=10000, iteration_callback=None):
     """Perform Exchange ADMM on a city district.
 
     Do the scheduling of electrical energy in a city district using the
@@ -192,6 +192,9 @@ def exchange_admm(city_district, models=None, beta=1.0, eps_primal=0.1,
                 "{0}: Could not read from variables."
                 .format(str(city_district))
             )
+
+        if iteration_callback is not None:
+            iteration_callback(city_district, models)
 
         # --------------------------
         # 3) incentive signal update

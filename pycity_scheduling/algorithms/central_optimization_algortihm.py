@@ -3,7 +3,7 @@ import gurobi
 from pycity_scheduling.util import populate_models
 
 
-def central_optimization(city_district, models=None, beta=1):
+def central_optimization(city_district, models=None, beta=1, iteration_callback=None):
     """Implementation of the central optimization algorithm.
 
     Schedule all buildings together with respect to the aggregator objective.
@@ -37,6 +37,9 @@ def central_optimization(city_district, models=None, beta=1):
     model.setObjective(obj)
 
     model.optimize()
+
+    if iteration_callback is not None:
+        iteration_callback(city_district, models)
 
     for node in city_district.node.values():
         entity = node['entity']

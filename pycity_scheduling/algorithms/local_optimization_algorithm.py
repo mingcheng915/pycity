@@ -3,7 +3,7 @@ import gurobi
 from pycity_scheduling.util import populate_models
 
 
-def local_optimization(city_district, models=None):
+def local_optimization(city_district, models=None, iteration_callback=None):
     """Implementation of the local optimization algorithm.
 
     Schedule all buildings in `city_district` on their own.
@@ -30,6 +30,9 @@ def local_optimization(city_district, models=None):
     model.setObjective(obj)
 
     model.optimize()
+
+    if iteration_callback is not None:
+        iteration_callback(city_district, models)
 
     for node in city_district.node.values():
         entity = node['entity']
