@@ -1,4 +1,4 @@
-import gurobi
+import gurobipy as gurobi
 import pycity_base.classes.supply.ElectricalHeater as eh
 
 from .thermal_entity import ThermalEntity
@@ -34,7 +34,7 @@ class ElectricalHeater(ThermalEntity, ElectricalEntity, eh.ElectricalHeater):
         """
 
         super(ElectricalHeater, self).__init__(environment.timer, environment,
-                                               P_Th_Nom, eta, tMax,
+                                               P_Th_Nom*1000, eta, tMax,
                                                lowerActivationLimit)
         self._long_ID = "EH_" + self._ID_string
 
