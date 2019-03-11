@@ -85,20 +85,16 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
                 model.addConstr(op_status*op_range*self.P_Th_Nom == -self.P_Th_vars[t],
                     "{0:s}_Th_Th_coupl_at_t={1}".format(self._long_ID, t)
                     )
-                model.addConstr(
-                    op_range == self.COP[t] * self.P_El_vars[t],
-                    "{0:s}_Th_El_coupl_at_t={1}".format(self._long_ID, t)
-                )
             model.update()
         else:
             for var in self.P_Th_vars:
                 var.lb = -self.P_Th_Nom
                 var.ub = 0
-            for t in self.op_time_vec:
-                model.addConstr(
-                    -self.P_Th_vars[t] == self.COP[t] * self.P_El_vars[t],
-                    "{0:s}_Th_El_coupl_at_t={1}".format(self._long_ID, t)
-                )
+        for t in self.op_time_vec:
+            model.addConstr(
+                -self.P_Th_vars[t] == self.COP[t] * self.P_El_vars[t],
+                "{0:s}_Th_El_coupl_at_t={1}".format(self._long_ID, t)
+            )
 
     def update_schedule(self, mode=""):
         ThermalEntity.update_schedule(self, mode)
