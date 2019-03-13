@@ -43,6 +43,12 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
             )
         self.P_El_Nom = P_El_Nom
         self.E_Min_Consumption = E_Min_Consumption
+        self.E_Min_Slots = E_Min_Consumption / (P_El_Nom * environment.timer.time_slot)
+        if self.E_Min_Slots != np.ceil(self.E_Min_Slots):
+            print("Warn: ...")#TODO
+            np.int(np.ceil(self.E_Min_Slots))
+        else:
+            self.E_Min_Slots = np.int(self.E_Min_Slots)
         self.time = time
         self.P_El_bvars = []
         self.P_El_Sum_constrs = []
@@ -58,16 +64,15 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         Parameters
         ----------
         model : gurobi.Model
-        mode : str, optional
         """
-        super(DeferrableLoad, self).populate_model(model, mode)
+        super(DeferrableLoad, self).populate_model(model)
 
         # device is on or off
-        if mode == "Binary":
-            self.P_El_bvars = []
+        self.P_El_bvars = []
 
-            # Add variables:
-            for t in self.op_time_vec:
+        # Add variables:
+        for t in self.op_time_vec:
+            if self.time[t] == 1:
                 self.P_El_bvars.append(
                     model.addVar(
                         vtype=gurobi.GRB.BINARY,
@@ -75,29 +80,35 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                              % (self._long_ID, t+1)
                     )
                 )
-            model.update()
+            else:
+                self.P_El_bvars.append(0)
+        model.update()
 
-            # Set additional constraints:
-            for t in self.op_time_vec:
-                model.addConstr(
-                    self.P_El_vars[t] <= self.P_El_bvars[t] * 1000000
-                )
+        # Set additional constraints:
+        for t in self.op_time_vec:
             model.addConstr(
-                gurobi.quicksum(
-                    (self.P_El_bvars[t] - self.P_El_bvars[t+1])
-                    * (self.P_El_bvars[t] - self.P_El_bvars[t+1])
-                    for t in range(self.op_horizon - 1))
-                <= 2
+                self.P_El_vars[t] == self.P_El_bvars[t] * self.P_El_Nom
             )
 
-    def update_model(self, model, mode=""):
-        timestep = self.timer.currentTimestep
-        for t in self.op_time_vec:
-            self.P_El_vars[t].ub = 0
+        model.addConstr(
+            self.P_El_bvars[0] + gurobi.quicksum(
+                (self.P_El_bvars[t] - self.P_El_bvars[t+1])
+                * (self.P_El_bvars[t] - self.P_El_bvars[t+1])
+                for t in range(self.op_horizon - 1))
+            <= 2
+        )
 
-        blocks, portion = compute_blocks(self.timer, self.time)
-        if len(blocks) == 0:
-            return
+        self.P_El_Sum_constrs.append(
+            model.addConstr(
+                gurobi.quicksum(self.P_El_bvars)
+                == self.E_Min_Slots
+            )
+        )
+
+    def update_model(self, model, mode=""):
+        super(DeferrableLoad, self).update_model(model)
+
+        timestep = self.timer.currentTimestep
         # raises GurobiError if constraints are from a prior scheduling
         # optimization
         try:
@@ -108,46 +119,19 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         del self.P_El_Sum_constrs[:]
         # consider already completed consumption
         completed_load = 0
-        if blocks[0][0] == 0:
-            for val in self.P_El_Schedule[:timestep][::-1]:
-                if val > 0:
-                    completed_load += val
-                else:
-                    break
-            completed_load *= self.time_slot
-        # consider future consumption
-        consumption = self.E_Min_Consumption
-        if len(blocks) == 1:
-            consumption *= portion
-        block_vars = self.P_El_vars[blocks[0][0]:blocks[0][1]]
-        for var in block_vars:
-            var.ub = self.P_El_Nom
+        for p in self.P_El_Schedule[timestep:timestep+self.op_horizon]:
+            assert (p == self.P_El_Nom or p == 0)
+            completed_load += int(p/self.P_El_Nom)
+        if 0 < completed_load < self.E_Min_Slots:
+            self.P_El_bvars[0].lb = 1
+        else:
+            self.P_El_bvars[0].lb = 0
         self.P_El_Sum_constrs.append(
             model.addConstr(
-                gurobi.quicksum(block_vars) * self.time_slot
-                == consumption - completed_load
+                gurobi.quicksum(self.P_El_bvars)
+                == self.E_Min_Slots - completed_load
             )
         )
-        for block in blocks[1:-1]:
-            block_vars = self.P_El_vars[block[0]:block[1]]
-            for var in block_vars:
-                var.ub = self.P_El_Nom
-            self.P_El_Sum_constrs.append(
-                model.addConstr(
-                    gurobi.quicksum(block_vars) * self.time_slot
-                    == self.E_Min_Consumption
-                )
-            )
-        if len(blocks) > 1:
-            block_vars = self.P_El_vars[blocks[-1][0]:blocks[-1][1]]
-            for var in block_vars:
-                var.ub = self.P_El_Nom
-            self.P_El_Sum_constrs.append(
-                model.addConstr(
-                    gurobi.quicksum(block_vars) * self.time_slot
-                    == self.E_Min_Consumption * portion
-                )
-            )
 
     def get_objective(self, coeff=1):
         """Objective function for entity level scheduling.
@@ -166,16 +150,4 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         gurobi.QuadExpr :
             Objective function.
         """
-        max_loading_time = sum(self.time) * self.time_slot
-        optimal_P_El = self.E_Min_Consumption / max_loading_time
-        obj = gurobi.QuadExpr()
-        obj.addTerms(
-            [coeff] * self.op_horizon,
-            self.P_El_vars,
-            self.P_El_vars
-        )
-        obj.addTerms(
-            [- 2 * coeff * optimal_P_El] * self.op_horizon,
-            self.P_El_vars
-        )
-        return obj
+        return gurobi.QuadExpr()
