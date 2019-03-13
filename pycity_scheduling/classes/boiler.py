@@ -52,9 +52,18 @@ class Boiler(ThermalEntity, bl.Boiler):
         """
         super(Boiler, self).populate_model(model, mode)
 
-        for var in self.P_Th_vars:
-            var.lb = -self.P_Th_Nom
-            var.ub = 0
+        if self.lowerActivationLimit != 0:
+            for t in self.op_time_vec:
+                self.P_Th_vars[t].lb = -gurobi.GRB.INFINITY
+                op_status = model.addVar(vtype=gurobi.GRB.BINARY, name="%s_P_Op_b_t=%i" % (self._long_ID, t + 1))
+                op_range = model.addVar(vtype=gurobi.GRB.CONTINUOUS, lb=self.lowerActivationLimit, ub=1,
+                                        name="%s_P_Op_d_t=%i" % (self._long_ID, t + 1))
+                model.addConstr(op_status * op_range * self.P_Th_Nom == -self.P_Th_vars[t])
+
+        else:
+            for var in self.P_Th_vars:
+                var.lb = -self.P_Th_Nom
+                var.ub = 0
 
     def get_objective(self, coeff=1):
         """Objective function for entity level scheduling.
