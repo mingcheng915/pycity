@@ -36,7 +36,7 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
 
     def get_objective(self, coeff=1):
         obj = gurobi.QuadExpr()
-        if self.objective == "valley_filling":
+        if self.objective == "peak_shaving":
             obj.addTerms(
                 [1] * self.op_horizon,
                 self.P_El_vars,
