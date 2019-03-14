@@ -43,7 +43,7 @@ sh = SpaceHeating(e, method=0, loadcurve=load)
 ap.addEntity(sh)
 
 
-f = algorithms['exchange-admm']
+f = algorithms['exchange-admm-mpi']
 r = f(cd, rho=2, eps_primal=0.001)
 
 

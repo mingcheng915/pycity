@@ -1,4 +1,4 @@
-import mpi4py as MPI
+from mpi4py import MPI
 from pycity_scheduling.classes import *
 from pycity_scheduling.exception import *
 import numpy as np
@@ -19,9 +19,9 @@ class MPI_Nodes(dict):
         super(MPI_Nodes, self).__init__()
         self.__comm__ = comm
         self.__size__ = comm.Get_remote_size()
-        self.__workers__ = range(self.__size__)
+        self.__workers__ = range(1,self.__size__)
         for node_i, node in enumerate(nodes):
-            self[node.name] = Node(node_i % self.__size__, node)
+            self[node["name"]] = Node(node_i % len(self.__workers__), node)
         for worker in self.__workers__:
             comm.send([node for node in self.values() if node.__worker_id__ == worker], dest=worker, tag=10)
 
@@ -43,15 +43,18 @@ class MPI_Nodes(dict):
 
 
 class mpi_context:
-    def __enter__(self, nodes, max_procs=10):
-        self.comm = MPI.COMM_SELF.Spawn(sys.executable, args=['mpi_optimize_nodes.py'], maxprocs=max_procs)
-        self.size = comm.Get_remote_size()
-        return MPI_Nodes(comm, nodes)
+    def __init__(self,nodes,max_procs=10):
+        self.comm = MPI.COMM_SELF.Spawn(sys.executable, args=['/home/schwarz/sue/Git/pyCity_scheduling/pycity_scheduling/util/mpi_optimize_nodes.py'], maxprocs=max_procs)
+        self.size = self.comm.Get_remote_size()
+        self.obj = MPI_Nodes(self.comm, nodes)
+        return self.obj
+    def __enter__(self):
+        return self.obj
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for i in range(size):
-            comm.send(None, dest=i, tag=11)
-        comm.Disconnect()
+        for i in range(self.size):
+            self.comm.send(None, dest=i, tag=11)
+        self.comm.Disconnect()
 
 
 

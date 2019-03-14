@@ -9,7 +9,7 @@ MAX_PROCS = 10
 
 def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                   eps_dual=1.0, rho=2.0, max_iterations=10000, iteration_callback=None):
-    from pycity_scheduling.util.mpi_optimize_nodes import MPI_Nodes
+    from pycity_scheduling.util.mpi_optimize_nodes import mpi_context
     """Perform Exchange ADMM on a city district.
 
     Do the scheduling of electrical energy in a city district using the
@@ -70,17 +70,13 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
     r_norms = [gurobi.GRB.INFINITY]
     s_norms = [gurobi.GRB.INFINITY]
 
-    if models is None:
-        models = populate_models(city_district, "admm")
-
     old_P_El_Schedule[0] = np.zeros(op_horizon)
     current_P_El_Schedule[0] = np.zeros(op_horizon)
     for node_id, node in nodes.items():
         old_P_El_Schedule[node_id] = np.zeros(op_horizon)
         current_P_El_Schedule[node_id] = np.zeros(op_horizon)
-        node['entity'].update_model(models[node_id])
 
-    model = populate_models(city_district, "local", 4)
+    model = gurobi.Model()
     city_district.update_model(model)
 
     # ----------------
@@ -88,7 +84,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
     # ----------------
 
     # do optimization iterations until stopping criteria are met
-    with MPI_Nodes(nodes.values()) as mpi_nodes:
+    with mpi_context(nodes.values()) as mpi_nodes:
         while r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
             iteration += 1
             if iteration > max_iterations:
