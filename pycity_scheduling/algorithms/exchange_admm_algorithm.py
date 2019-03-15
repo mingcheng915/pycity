@@ -192,10 +192,6 @@ def exchange_admm(city_district, models=None, beta=1.0, eps_primal=0.1,
                 "{0}: Could not read from variables."
                 .format(str(city_district))
             )
-
-        if iteration_callback is not None:
-            iteration_callback(city_district, models)
-
         # --------------------------
         # 3) incentive signal update
         # --------------------------
@@ -228,6 +224,8 @@ def exchange_admm(city_district, models=None, beta=1.0, eps_primal=0.1,
             )
             i1 += op_horizon
         s_norms.append(np.linalg.norm(s))
+        if iteration_callback is not None:
+            iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1])
 
     city_district.update_schedule()
     for entity in city_district.get_lower_entities():
