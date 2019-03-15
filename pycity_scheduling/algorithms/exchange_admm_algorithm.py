@@ -131,6 +131,8 @@ def exchange_admm(city_district, models=None, beta=1.0, eps_primal=0.1,
             model = models[node_id]
             model.setObjective(obj)
             model.optimize()
+
+            print("admm:"+ str(node_id) +" " + str(model.getObjective().getValue()))
             runtimes[node_id].append(model.Runtime)
 
             try:

@@ -85,6 +85,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
         models = populate_models(city_district, "admm")
         for node_id, node in nodes.items():
             node['entity'].update_model(models[node_id])
+        city_district.update_model(models[0])
         while r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
             iteration += 1
             if iteration > max_iterations:
@@ -114,7 +115,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                 quad = [rho / 2] * op_horizon
                 linear = list(rho * (- pv + xv + uv) for pv, xv, uv in
                           zip(current_P_El_Schedule[node_id], x_, u))
-                obj = obj = entity.get_objective(beta)
+                obj = entity.get_objective(beta)
             # penalty term is expanded and constant is omitted
                 obj.addTerms(
                     [rho / 2] * op_horizon,
@@ -127,7 +128,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                      entity.P_El_vars
                 )
                 models[node_id].setObjective(obj)
-                node.do_iteration(quad, linear, timeLimit=60)
+                node.do_iteration(quad, linear)
 
             mpi_nodes.calculate()
 
@@ -138,6 +139,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                     m_var.ub = var
                     m_var.lb = var
                 model.optimize()
+                print("admm:"+ str(node_id) +" " + str(model.getObjective().getValue()))
                 np.copyto(
                         current_P_El_Schedule[node_id],
                         [var.X for var in node['entity'].P_El_vars]

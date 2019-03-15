@@ -12,8 +12,8 @@ class Node(dict):
         self.update(node)
         self.__worker_id__ = worker
         self.__idata__ = None
-    def do_iteration(self,quad_obj, lin_obj, timeLimit=60):
-        self.__i_data__ = {'node_id': self['name'], 'timeLimit': timeLimit, 'obj_mod':[quad_obj, lin_obj]}
+    def do_iteration(self,quad_obj, lin_obj):
+        self.__i_data__ = {'node_id': self['name'], 'obj_mod':[quad_obj, lin_obj]}
 
 class MPI_Nodes(dict):
     def __init__(self, comm, nodes):
@@ -70,7 +70,7 @@ if __name__ == '__main__':
         m.setParam("OutputFlag", False)
         m.setParam("LogFile", "")
         m.setParam("Threads", 1)
-        m.setParam("MIPGap", 0.01)
+        m.setParam("MIPGap", 20)
         node['entity'].populate_model(m)
         node['entity'].update_model(m)
         node["model"] = m
@@ -85,7 +85,6 @@ if __name__ == '__main__':
             entity = node['entity']
             obj_mod = node_data['obj_mod']
             m = node["model"]
-            m.setParam("TimeLimit", node_data['timeLimit'])
             if not isinstance(
                     entity,
                     (Building, Photovoltaic, WindEnergyConverter)
@@ -106,6 +105,7 @@ if __name__ == '__main__':
             m.setObjective(obj)
             m.optimize()
 
+            print("mpi:"+ str(node_id) +" " + str(m.getObjective().getValue()))
             try:
                 output[node_id] = dict((var.VarName, var.X) for var in m.getVars())
             except gurobi.GurobiError:
