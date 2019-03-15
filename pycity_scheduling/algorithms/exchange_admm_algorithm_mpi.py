@@ -76,15 +76,15 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
         old_P_El_Schedule[node_id] = np.zeros(op_horizon)
         current_P_El_Schedule[node_id] = np.zeros(op_horizon)
 
-    model = gurobi.Model()
-    city_district.update_model(model)
-
     # ----------------
     # Start scheduling
     # ----------------
 
     # do optimization iterations until stopping criteria are met
     with mpi_context(nodes.values()) as mpi_nodes:
+        models = populate_models(city_district, "admm")
+        for node_id, node in nodes.items():
+            node['entity'].update_model(models[node_id])
         while r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
             iteration += 1
             if iteration > max_iterations:
@@ -112,17 +112,37 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                 )
                 # penalty term is expanded and constant is omitted
                 quad = [rho / 2] * op_horizon
-                linear = (rho * (- pv + xv + uv) for pv, xv, uv in
+                linear = list(rho * (- pv + xv + uv) for pv, xv, uv in
                           zip(current_P_El_Schedule[node_id], x_, u))
-                node.do_iteration(quad, linear)
+                obj = obj = entity.get_objective(beta)
+            # penalty term is expanded and constant is omitted
+                obj.addTerms(
+                    [rho / 2] * op_horizon,
+                    entity.P_El_vars,
+                    entity.P_El_vars
+                )
+                obj.addTerms(
+                    (rho * (- pv + xv + uv) for pv, xv, uv in
+                     zip(current_P_El_Schedule[node_id], x_, u)),
+                     entity.P_El_vars
+                )
+                models[node_id].setObjective(obj)
+                node.do_iteration(quad, linear, timeLimit=60)
 
             mpi_nodes.calculate()
 
             for node_id, node in mpi_nodes.items():
+                model = models[node_id]
+                for var_name, var in node['vars'].items():
+                    m_var = model.getVarByName(var_name)
+                    m_var.ub = var
+                    m_var.lb = var
+                model.optimize()
                 np.copyto(
                         current_P_El_Schedule[node_id],
-                        node['P_El_Schedule']
+                        [var.X for var in node['entity'].P_El_vars]
                     )
+                
 
             # ----------------------
             # 2) optimize aggregator
@@ -201,8 +221,10 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                 iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1])
 
         city_district.update_schedule()
-        for entity in city_district.get_lower_entities():
-            entity.update_schedule()
+        for node_id, node in nodes.items():
+            entity = node['entity']
+            timestep = entity.timer.currentTimestep
+            entity.P_El_Schedule[timestep:timestep+op_horizon] = current_P_El_Schedule[node_id]
 
         # if settings.BENCHMARK:
         #     print("\nNumber of ADMM iterations: {0}".format(iteration))
