@@ -5,7 +5,7 @@ from pycity_scheduling.classes import *
 from pycity_scheduling.exception import *
 from pycity_scheduling.util import populate_models
 
-MAX_PROCS = 10
+PROCS = 10
 
 def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                   eps_dual=1.0, rho=2.0, max_iterations=10000, iteration_callback=None):
@@ -56,6 +56,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
        Sandra Hirche, Christoph Goebel, and Hans-Arno Jacobsen
        Online: https://mediatum.ub.tum.de/doc/1187583/1187583.pdf
     """
+
     op_horizon = city_district.op_horizon
     nodes = city_district.nodes
     n = 1 + len(nodes)
@@ -70,18 +71,25 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
     r_norms = [gurobi.GRB.INFINITY]
     s_norms = [gurobi.GRB.INFINITY]
 
+    if models is None:
+        models = populate_models(city_district, "admm")
+    remote_models = models.copy()
+    remote_models.pop(0)
     old_P_El_Schedule[0] = np.zeros(op_horizon)
     current_P_El_Schedule[0] = np.zeros(op_horizon)
     for node_id, node in nodes.items():
         old_P_El_Schedule[node_id] = np.zeros(op_horizon)
         current_P_El_Schedule[node_id] = np.zeros(op_horizon)
+        node['entity'].update_model(models[node_id])
+
+    city_district.update_model(models[0])
 
     # ----------------
     # Start scheduling
     # ----------------
 
     # do optimization iterations until stopping criteria are met
-    with mpi_context(city_district) as mpi_nodes, models:
+    with mpi_context(procs=PROCS) as MPI_Workers:
         while r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
             iteration += 1
             if iteration > max_iterations:
@@ -96,7 +104,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
             # -----------------
             # 1) optimize nodes
             # -----------------
-            for node_id, node in mpi_nodes.items():
+            for node_id, node in nodes.items():
                 entity = node['entity']
                 if not isinstance(
                         entity,
@@ -121,19 +129,33 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                     entity.P_El_vars
                 )
 
-                models[node_id].setObjective(obj)
-                node.do_iteration()
-
-            mpi_nodes.calculate()
-
-            for node_id in mpi_nodes.keys():
                 model = models[node_id]
+                model.setObjective(obj)
+
+            MPI_Workers.calculate(remote_models)
+
+            for node_id, node in nodes.items():
                 print("admm:"+ str(node_id) +" " + str(model.getObjective().getValue()))
-                np.copyto(
-                    current_P_El_Schedule[node_id],
-                    [var.x for var in entity.P_El_vars]
-                )
-                
+
+                try:
+                    np.copyto(
+                        current_P_El_Schedule[node_id],
+                        [var.x for var in entity.P_El_vars]
+                    )
+                except gurobi.GurobiError:
+                    print("Model Status: %i" % model.status)
+                    if model.status == 4:  # and settings.DEBUG:
+                        model.computeIIS()
+                        model.write("infeasible.ilp")
+                    if model.status == 12:  # and settings.DEBUG:
+                        print("Last P_El_Schedule:")
+                        print(current_P_El_Schedule[node_id])
+                        print("Last x_:")
+                        print(x_)
+                    raise PyCitySchedulingGurobiException(
+                        "{0}: Could not read from variables at iteration {1}."
+                        .format(str(entity), iteration)
+                    )
 
             # ----------------------
             # 2) optimize aggregator
