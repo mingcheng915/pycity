@@ -1,53 +1,67 @@
 from mpi4py import MPI
-from pycity_scheduling.classes import *
-from pycity_scheduling.exception import *
 import gurobipy as gurobi
 import sys
 import tempfile
 
-def unpack_model(data: dict, model: gurobi.Model):
-    with tempfile.TemporaryDirectory() as dir:
-        with open(dir.name + "/tmp.hnt", 'w+') as f:
+def unpack_model(data: dict) -> gurobi.Model:
+    with tempfile.TemporaryDirectory() as dirname:
+        with open(dirname + "/tmp.mps", 'w+') as f:
+            f.write(data['mps'])
+        model = gurobi.read(dirname + "/tmp.mps")
+        model.setParam('OutputFlag', False)
+        with open(dirname + "/tmp.hnt", 'w+') as f:
             f.write(data['hnt'])
-        model.read(dir.name + "/tmp.hnt")
-        if 'sol' in data:
-            with open(dir.name + "/tmp.sol", 'w+') as f:
-                f.write(data['sol'])
-            model.read(dir.name + "/tmp.sol")
-        else:
-            with open(dir.name + "/tmp.mps", 'w+') as f:
-                f.write(data['mps'])
-            model.read(dir.name + "/tmp.mps")
-            with open(dir.name + "/tmp.mst", 'w+') as f:
+        model.read(dirname + "/tmp.hnt")
+        if 'mst' in data:
+            with open(dirname + "/tmp.mst", 'w+') as f:
                 f.write(data['mst'])
-            model.read(dir.name + "/tmp.mst")
-            with open(dir.name + "/tmp.prm", 'w+') as f:
-                f.write(data['prm'])
-            model.read(dir.name + "/tmp.prm")
+            model.read(dirname + "/tmp.mst")
+        with open(dirname + "/tmp.prm", 'w+') as f:
+            f.write(data['prm'])
+        model.read(dirname + "/tmp.prm")
         model.update()
+        return model
+
+def unpack_results(data: dict, model: gurobi.Model):
+    with tempfile.TemporaryDirectory() as dirname:
+        assert 'sol' in data
+        with open(dirname + "/tmp.hnt", 'w+') as f:
+            f.write(data['hnt'])
+        model.read(dirname + "/tmp.hnt")
+        with open(dirname + "/tmp.sol", 'w+') as f:
+            f.write(data['sol'])
+        model.read(dirname + "/tmp.sol")
+        oldtime = model.Params.TimeLimit
+        model.Params.TimeLimit = 0.5
+        model.optimize()
+        model.Params.TimeLimit = oldtime
+
 
 def pack_model(model_id, model, solution=False) -> dict:
     tosend = {}
     tosend['id'] = model_id
     model.update()
-    with tempfile.TemporaryDirectory() as dir:
-        model.write(dir.name + "/tmp.hnt")
-        with open(dir.name + "/tmp.hnt") as f:
+    with tempfile.TemporaryDirectory() as dirname:
+        model.write(dirname + "/tmp.hnt")
+        with open(dirname + "/tmp.hnt") as f:
             tosend['hnt'] = f.read()
         if solution is True:
-            model.write(dir.name + "/tmp.sol")
-            with open(dir.name + "/tmp.sol") as f:
+            tosend['vars'] = {v.varname: v.x for v in model.getVars()}
+            model.write(dirname + "/tmp.sol")
+            with open(dirname + "/tmp.sol") as f:
                 tosend['sol'] = f.read()
         else:
-            model.write(dir.name + "/tmp.mps")
-            with open(dir.name + "/tmp.mps") as f:
+            model.write(dirname + "/tmp.mps")
+            with open(dirname + "/tmp.mps") as f:
                 tosend['mps'] = f.read()
-            model.write(dir.name + "/tmp.mst")
-            with open(dir.name + "/tmp.mst") as f:
-                tosend['mst'] = f.read()
-            model.write(dir.name + "/tmp.prm")
-            with open(dir.name + "/tmp.prm") as f:
+            if not any([var.start == gurobi.GRB.UNDEFINED for var in model.getVars()]):
+                model.write(dirname + "/tmp.mst")
+                with open(dirname + "/tmp.mst") as f:
+                    tosend['mst'] = f.read()
+            model.write(dirname + "/tmp.prm")
+            with open(dirname + "/tmp.prm") as f:
                 tosend['prm'] = f.read()
+    return tosend
 
 class MPI_Models():
     def __init__(self, comm):
@@ -57,21 +71,23 @@ class MPI_Models():
 
     def calculate(self, models):
         #send work out
-        free = self.__workers__
-        for model_id, model in self.items():
+        free = self.__workers__.copy()
+        for model_id, model in models.items():
             if len(free) == 0:#wait to receive results from a worker
                 info = MPI.Status()
                 recv = self.__comm__.recv(tag=12, source=MPI.ANY_SOURCE, status=info)
-                unpack_model(recv, self[recv['id']])
+                unpack_results(recv, models[recv['id']])
                 free.append(info.Get_source())
             tosend = pack_model(model_id, model, False)
-            self.__comm__.send(tosend, dest=free.pop(1), tag=11)
+            assert tosend is not None
+            self.__comm__.send(tosend, dest=free.pop(0), tag=11)
 
         #collect remaining work
         for worker in self.__workers__:
             if worker not in free:
-                recv = self.__comm__.recv(tag=12, source=MPI.ANY_SOURCE, status=info)
-                unpack_model(recv, self[recv['id']])
+                recv = self.__comm__.recv(tag=12, source=MPI.ANY_SOURCE)
+                unpack_results(recv, models[recv['id']])
+        print("finished calculation")
 
 class mpi_context:
     def __init__(self, procs=20):
@@ -94,11 +110,9 @@ if __name__ == '__main__':
     rank = comm.Get_rank()
     i_data = comm.recv(source=0, tag=11)
     while i_data is not None:
-        model = gurobi.Model()
-        unpack_model(i_data, model)
+        model = unpack_model(i_data)
         model.optimize()
         output = pack_model(i_data['id'], model, True)
         comm.send(output, dest=0, tag=12)
         i_data = comm.recv(source=0, tag=11)
-    print("exiting")
     comm.Disconnect()
