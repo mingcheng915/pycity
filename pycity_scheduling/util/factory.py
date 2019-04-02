@@ -185,11 +185,12 @@ def generate_tabula_buildings(environment,
                 ap.addEntity(fl)
 
             if dl_list[ap_counter]:
-                e_el = random.uniform(0.8, 4.5)
                 p_el = random.uniform(1.125, 2.5)
+                dt = int(3600 / environment.timer.timeDiscretization)
+                runtime = random.randint(1*dt, 3*dt)
                 time = random.choice(dl_time_ranges)
                 dl = DeferrableLoad(environment, P_El_Nom=p_el,
-                                    E_Min_Consumption=e_el, time=time)
+                                    E_Min_Consumption=p_el*runtime/dt, time=time)
                 ap.addEntity(dl)
 
             if ev_list[ap_counter]:

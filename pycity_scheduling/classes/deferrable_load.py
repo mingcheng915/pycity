@@ -1,6 +1,7 @@
 import numpy as np
 import gurobipy as gurobi
 import pycity_base.classes.demand.ElectricalDemand as ed
+import warnings
 
 from ..exception import PyCitySchedulingInitError
 from ..util import compute_blocks
@@ -45,7 +46,10 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.E_Min_Consumption = E_Min_Consumption
         self.E_Min_Slots = E_Min_Consumption / (P_El_Nom * environment.timer.time_slot)
         if self.E_Min_Slots != np.ceil(self.E_Min_Slots):
-            print("Warn: ...")#TODO
+            warnings.warn(
+                "Minimal Power Consumption can't be reached with Nominal Power for {}. Rounding Power Consumption up."
+                    .format(self._long_ID)
+            )
             np.int(np.ceil(self.E_Min_Slots))
         else:
             self.E_Min_Slots = np.int(self.E_Min_Slots)
@@ -119,13 +123,16 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         del self.P_El_Sum_constrs[:]
         # consider already completed consumption
         completed_load = 0
-        for p in self.P_El_Schedule[timestep:timestep+self.op_horizon]:
+        for p in self.P_El_Schedule[:timestep][::-1]:
             assert (p == self.P_El_Nom or p == 0)
             completed_load += int(p/self.P_El_Nom)
+
+        #if load is already running, set initial state to ON
         if 0 < completed_load < self.E_Min_Slots:
             self.P_El_bvars[0].lb = 1
         else:
-            self.P_El_bvars[0].lb = 0
+            if type(self.P_El_bvars[0]) != int:
+                self.P_El_bvars[0].lb = 0
         self.P_El_Sum_constrs.append(
             model.addConstr(
                 gurobi.quicksum(self.P_El_bvars)
