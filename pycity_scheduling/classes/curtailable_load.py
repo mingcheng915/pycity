@@ -4,59 +4,40 @@ import pycity_base.classes.demand.ElectricalDemand as ed
 from .electrical_entity import ElectricalEntity
 
 
-class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
+class CurtailableLoad(ElectricalEntity):
     """
     Extension of pycity class ElectricalDemand for scheduling purposes.
     """
 
-    def __init__(self, environment, MaxCurtailment, method=0, demand=0,
-                 annualDemand=0, profileType="H0", singleFamilyHouse=True):
+    def __init__(self, environment, P_El_Nom: float, max_low_time: int = None, min_on_time: int = 1,
+                 min_operation_level: float=0):
         """Initialize a curtailable load.
 
         Parameters
         ----------
         environment : Environment
             Common Environment instance.
-        MaxCurtailment : float
-            Maximal Curtailment of the load
-        method : {0, 1}, optional
-            - 0: provide load curve directly
-            - 1: standard load profile
-        demand : array_like of float, optional
-            Loadcurve for all investigated time steps in [kW].
-        annualDemand : float
-            Required for SLP and recommended for method 2.
-            Annual electrical demand in [kWh].
-            If method 2 is chosen but no value is given, a standard value for
-            Germany (http://www.die-stromsparinitiative.de/fileadmin/bilder/
-            Stromspiegel/Brosch%C3%BCre/Stromspiegel2014web_final.pdf) is used.
-        profileType : String (required for SLP)
-            - H0 : Household
-            - L0 : Farms
-            - L1 : Farms with breeding / cattle
-            - L2 : Farms without cattle
-            - G0 : Business (general)
-            - G1 : Business (workingdays 8:00 AM - 6:00 PM)
-            - G2 : Business with high loads in the evening
-            - G3 : Business (24 hours)
-            - G4 : Shops / Barbers
-            - G5 : Bakery
-            - G6 : Weekend operation
+        P_El_Nom : float
+            Nominal elctric power in [kW].
+        max_low_time : int
+            Amount of time slots the Curtailable Load is allowed to stay under nominal load.
+        min_on_time : int
+            Minimum Amount of time slots the Curtailable Load has to operate on nominal load after operating under
+            nominal load.
+        min_operation_level : float
+            Minimum load the Device is allowed to operate at
         """
         super(CurtailableLoad, self).__init__(
-            environment.timer, environment, method, demand * 1000,
-            annualDemand, profileType, singleFamilyHouse
+            environment.timer
         )
         self._long_ID = "CUL_" + self._ID_string
 
-        self.max_curt = MaxCurtailment
+        self.P_El_Nom = P_El_Nom
 
-        if method == 0:
-            self.P_El_Demand = demand
-        else:
-            self.P_El_Demand = self.loadcurve / 1000
-
-        self.P_El_Curt_Demand = self.P_El_Demand * self.max_curt
+        self.max_low = max_low_time
+        self.min_on = min_on_time
+        assert 0 <= min_operation_level <= 1
+        self.min_level = min_operation_level
 
     def populate_model(self, model, mode=""):
         """Add variables to Gurobi model
@@ -71,9 +52,60 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
         """
         super(CurtailableLoad, self).populate_model(model, mode)
         time_shift = self.timer.currentTimestep
+        self.P_El_bvars=[]
+        constrs = []
         for t in self.op_time_vec:
-            self.P_El_vars[t].lb = self.P_El_Curt_Demand[t+time_shift]
-            self.P_El_vars[t].ub = self.P_El_Demand[t+time_shift]
+            self.P_El_vars[t].lb = self.min_level * self.P_El_Nom
+            self.P_El_vars[t].ub = self.P_El_Nom
+            bvar = model.addVar(
+                        vtype=gurobi.GRB.BINARY,
+                        name="%s_binary_at_t=%i"
+                             % (self._long_ID, t+1)
+                    )
+            #connect bvar to P_El_vars
+            constrs.append(model.addConstr(
+                bvar*(self.P_El_vars[t]-self.P_El_Nom) == 0
+            ))
+            self.P_El_bvars.append(bvar)
+        #add constr that requires returning to nominal power consumpiton
+        if self.max_low is None:
+            pass
+        elif self.max_low == 0:
+            for t in self.op_time_vec:
+                self.P_El_vars[t].lb = self.P_El_Nom
+            return
+        elif self.max_low > 0:
+            for t in self.op_time_vec:
+                if t+self.max_low <= max(self.op_time_vec):
+                    constrs.append(model.addConstr(
+                        1 <= gurobi.quicksum(self.P_El_bvars[t:t+self.max_low+1])
+                    ))
+        else:
+            raise ValueError
+
+        #add constraint to keep at minimum x steps on
+        if self.min_on <= 1:
+            pass
+        elif self.min_on > 1:
+            for t in self.op_time_vec[:-2]:
+                if t + self.min_on > max(self.op_time_vec)+1:
+                    min_on = self.min_on - (t + self.min_on - max(self.op_time_vec) - 1)
+                    assert min_on < self.min_on
+                    assert t + min_on == max(self.op_time_vec)+1
+                else:
+                    min_on = self.min_on
+                constrs.append(model.addConstr(
+                    (self.P_El_bvars[t + 1]-self.P_El_bvars[t])*self.P_El_bvars[t]*(min_on-1) <=
+                    gurobi.quicksum(self.P_El_bvars[t+2:t + 1 + min_on])
+                ))
+        else:
+            raise ValueError
+
+        #add constraint to not allow switching of electrical consumption without returning to nominal consumption
+        for t in self.op_time_vec[:-1]:
+            constrs.append(model.addConstr(
+                0 == (self.P_El_bvars[t]-self.P_El_bvars[t+1])*(self.P_El_vars[t]-self.P_El_vars[t+1])
+            ))
 
     def get_objective(self, coeff=1):
         """Objective function for entity level scheduling.
@@ -91,13 +123,4 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
         gurobi.QuadExpr :
             Objective function.
         """
-        obj = gurobi.QuadExpr()
-        obj.addTerms(
-            [coeff] * self.op_horizon,
-            self.P_El_vars,
-            self.P_El_vars
-        )
-        obj.addTerms(
-            [- 2 * coeff] * self.op_horizon,
-            self.P_El_vars
-        )
+        return gurobi.QuadExpr()
