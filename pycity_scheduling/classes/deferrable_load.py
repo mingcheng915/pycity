@@ -45,14 +45,14 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.P_El_Nom = P_El_Nom
         self.E_Min_Consumption = E_Min_Consumption
         self.E_Min_Slots = E_Min_Consumption / (P_El_Nom * environment.timer.time_slot)
-        if self.E_Min_Slots != np.ceil(self.E_Min_Slots):
+        if not np.isclose(self.E_Min_Slots, np.rint(self.E_Min_Slots)):
             warnings.warn(
                 "Minimal Power Consumption can't be reached with Nominal Power for {}. Rounding Power Consumption up."
                     .format(self._long_ID)
             )
             np.int(np.ceil(self.E_Min_Slots))
         else:
-            self.E_Min_Slots = np.int(self.E_Min_Slots)
+            self.E_Min_Slots = np.rint(self.E_Min_Slots)
         self.time = time
         self.P_El_bvars = []
         self.P_El_Sum_constrs = []
