@@ -48,6 +48,16 @@ def _calculate_dl_times(timer):
     ]
     return dl_time_ranges
 
+def _create_enercon_wec(environment):
+    return WindEnergyConverter(environment,
+                        velocity=[2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0,
+                                  10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0,
+                                  22.0, 23.0, 24.0, 25.0, 25.5],
+                        power=[0.00, 1.14, 4.37, 10.64, 18.87, 29.77, 40.39, 52.85, 69.36, 88.02, 112.19, 134.67,
+                               165.38, 197.08, 236.89, 279.46, 328.00, 362.93, 396.64, 435.27, 465.15, 483.63, 495.95,
+                               500.00, 500.00, 500.00, 500.00, 500.00, 500.00, 500.00, 500.00, 500.00, 500.00, 500.00,
+                               500.00, 0.00],
+                        hub_height=48)
 
 def generate_tabula_buildings(environment,
                               number,
@@ -273,7 +283,8 @@ def generate_tabula_district(environment,
                              mfh_device_probabilities=None,
                              agg_objective='price',
                              building_objective='price',
-                             seed=1):
+                             seed=1,
+                             include_wec=False):
     """Create a TABULA district.
 
     Parameters
@@ -330,7 +341,9 @@ def generate_tabula_district(environment,
     seed: int, optional
         Specify a seed for the randomization. If omitted, a non-deterministic
         city district will be generated.
-
+    include_wec: bool, optional
+        If True adds a Enercon E-40/5.40 to the city district.
+        Values are used from https://www.wind-turbine-models.com/turbines/67-enercon-e-40-5.40
     Returns
     -------
 
@@ -356,4 +369,6 @@ def generate_tabula_district(environment,
                                                    ))
     positions = [Point(0, 0) for _ in building_list]
     cd.addMultipleEntities(building_list, positions)
+    if include_wec:
+        cd.addEntity(_create_enercon_wec(environment), Point(0, 0), is_supply_electricity=True)
     return cd
