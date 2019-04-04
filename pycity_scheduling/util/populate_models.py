@@ -53,8 +53,9 @@ def populate_models(city_district, algorithm, num_threads=4):
         for node_id, node in nodes.items():
             m = gurobi.Model(str(node_id) + " Scheduling Model")
             m.setParam("OutputFlag", False)
+            #to garantee same results for mpi threads is set to 1
+            m.setParam("Threads", 1)
             m.setParam("LogFile", "")
-            m.setParam("Threads", num_threads)
             node['entity'].populate_model(m)
             models[node_id] = m
     return models
