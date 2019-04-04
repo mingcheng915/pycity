@@ -64,9 +64,10 @@ class CurtailableLoad(ElectricalEntity):
                     )
             #connect bvar to P_El_vars
             constrs.append(model.addConstr(
-                bvar*(self.P_El_vars[t]-self.P_El_Nom) == 0
+                bvar*self.P_El_Nom <= self.P_El_vars[t]
             ))
             self.P_El_bvars.append(bvar)
+        model.update()
         #add constr that requires returning to nominal power consumpiton
         if self.max_low is None:
             pass
@@ -95,7 +96,7 @@ class CurtailableLoad(ElectricalEntity):
                 else:
                     min_on = self.min_on
                 constrs.append(model.addConstr(
-                    (self.P_El_bvars[t + 1]-self.P_El_bvars[t])*self.P_El_bvars[t]*(min_on-1) <=
+                    (self.P_El_bvars[t + 1]-self.P_El_bvars[t])*self.P_El_bvars[t + 1]*(min_on-1) <=
                     gurobi.quicksum(self.P_El_bvars[t+2:t + 1 + min_on])
                 ))
         else:
@@ -104,7 +105,7 @@ class CurtailableLoad(ElectricalEntity):
         #add constraint to not allow switching of electrical consumption without returning to nominal consumption
         for t in self.op_time_vec[:-1]:
             constrs.append(model.addConstr(
-                0 == (self.P_El_bvars[t]-self.P_El_bvars[t+1])*(self.P_El_vars[t]-self.P_El_vars[t+1])
+                0 == (self.P_El_bvars[t]+self.P_El_bvars[t+1]-1)*(self.P_El_vars[t]-self.P_El_vars[t+1])
             ))
 
     def get_objective(self, coeff=1):
@@ -123,4 +124,4 @@ class CurtailableLoad(ElectricalEntity):
         gurobi.QuadExpr :
             Objective function.
         """
-        return gurobi.QuadExpr()
+        return 0
