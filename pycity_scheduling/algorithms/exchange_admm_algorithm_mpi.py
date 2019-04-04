@@ -73,8 +73,6 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
 
     if models is None:
         models = populate_models(city_district, "admm")
-    remote_models = models.copy()
-    remote_models.pop(0)
     old_P_El_Schedule[0] = np.zeros(op_horizon)
     current_P_El_Schedule[0] = np.zeros(op_horizon)
     for node_id, node in nodes.items():
@@ -104,6 +102,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
             # -----------------
             # 1) optimize nodes
             # -----------------
+            mpi_models = {}
             for node_id, node in nodes.items():
                 entity = node['entity']
                 if not isinstance(
@@ -131,10 +130,19 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
 
                 model = models[node_id]
                 model.setObjective(obj)
+                model.update()
+                mpi_models[node_id]=model
 
-            MPI_Workers.calculate(remote_models)
+            MPI_Workers.calculate(mpi_models)
 
             for node_id, node in nodes.items():
+                entity = node['entity']
+                if not isinstance(
+                        entity,
+                        (Building, Photovoltaic, WindEnergyConverter)
+                ):
+                    continue
+                model = models[node_id]
                 try:
                     np.copyto(
                         current_P_El_Schedule[node_id],
@@ -179,6 +187,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
             )
             model.setObjective(obj)
             model.optimize()
+
             try:
                 np.copyto(
                     current_P_El_Schedule[0],
