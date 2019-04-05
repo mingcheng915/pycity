@@ -89,15 +89,14 @@ class CurtailableLoad(ElectricalEntity):
             pass
         elif self.min_on > 1:
             for t in self.op_time_vec[:-2]:
-                if t + self.min_on > max(self.op_time_vec)+1:
-                    min_on = self.min_on - (t + self.min_on - max(self.op_time_vec) - 1)
-                    assert min_on < self.min_on
-                    assert t + min_on == max(self.op_time_vec)+1
+                to_be_on = self.P_El_bvars[t+2:t+self.min_on+1]
+                if self.min_on-1 <= len(self.P_El_bvars[t+2:]):
+                    assert len(to_be_on) == self.min_on-1
                 else:
-                    min_on = self.min_on
+                    assert self.P_El_bvars[t + 2:] == to_be_on
                 constrs.append(model.addConstr(
-                    (self.P_El_bvars[t + 1]-self.P_El_bvars[t])*self.P_El_bvars[t + 1]*(min_on-1) <=
-                    gurobi.quicksum(self.P_El_bvars[t+2:t + 1 + min_on])
+                    (self.P_El_bvars[t + 1]-self.P_El_bvars[t])*self.P_El_bvars[t + 1]*len(to_be_on) <=
+                    gurobi.quicksum(to_be_on)
                 ))
         else:
             raise ValueError
