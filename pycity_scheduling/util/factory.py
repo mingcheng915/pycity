@@ -141,9 +141,9 @@ def generate_tabula_buildings(environment,
     a = round(device_probabilities.get('DL', 0) * number_ap)
     b = number_ap - a
     dl_list = [True] * a + [False] * b
-    a = round(device_probabilities.get('CL', 0) * number_ap)
+    a = round(device_probabilities.get('CUL', 0) * number_ap)
     b = number_ap - a
-    cl_list = [True] * a + [False] * b
+    cul_list = [True] * a + [False] * b
     a = round(device_probabilities.get('EV', 0) * number_ap)
     b = number_ap - a
     ev_list = [True] * a + [False] * b
@@ -163,7 +163,7 @@ def generate_tabula_buildings(environment,
     random.shuffle(heating_list)
     random.shuffle(fl_list)
     random.shuffle(dl_list)
-    random.shuffle(cl_list)
+    random.shuffle(cul_list)
     random.shuffle(pv_list)
     random.shuffle(ev_list)
     random.shuffle(bat_list)
@@ -206,11 +206,11 @@ def generate_tabula_buildings(environment,
                                     E_Min_Consumption=p_el*runtime, time=time)
                 ap.addEntity(dl)
 
-            if cl_list[ap_counter]:
+            if cul_list[ap_counter]:
                 p_el = random.uniform(1.125, 2.5)
-                cl = CurtailableLoad(environment, p_el, random.randint(2, 6), random.randint(2, 6),
+                cul = CurtailableLoad(environment, p_el, random.randint(2, 6), random.randint(2, 6),
                                      random.choice([0, 0.5, 0.75]))
-                ap.addEntity(cl)
+                ap.addEntity(cul)
 
             if ev_list[ap_counter]:
                 ev_data = random.choice(list(evd.values()))
