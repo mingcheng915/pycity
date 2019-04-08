@@ -77,7 +77,8 @@ class CurtailableLoad(ElectricalEntity):
             return
         elif self.max_low > 0:
             for t in self.op_time_vec:
-                if t+self.max_low <= max(self.op_time_vec):
+                if t <= max(self.op_time_vec) - self.max_low:
+                    assert len(self.P_El_bvars[t:t+self.max_low+1]) == self.max_low+1
                     constrs.append(model.addConstr(
                         1 <= gurobi.quicksum(self.P_El_bvars[t:t+self.max_low+1])
                     ))
