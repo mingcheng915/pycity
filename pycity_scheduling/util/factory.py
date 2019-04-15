@@ -121,13 +121,13 @@ def generate_tabula_buildings(environment,
 
     building_dicts = []
     for building, share in building_distribution.items():
-        building_dicts += [tbd[building]] * round(share * number)
+        building_dicts += [tbd[building]] * int(round(share * number))
     if len(building_dicts) != number:
         raise PyCitySchedulingInitError("Bad building distribution.")
 
     heating_list = []
     for heating, share in heating_distribution.items():
-        heating_list += [heating_devices[heating]] * round(share * number)
+        heating_list += [heating_devices[heating]] * int(round(share * number))
     if len(heating_list) != number:
         raise PyCitySchedulingInitError("Bad heating distribution.")
 
@@ -135,23 +135,23 @@ def generate_tabula_buildings(environment,
         raise PyCitySchedulingInitError("Bad device probabilities")
 
     number_ap = sum(building['apartments'] for building in building_dicts)
-    a = round(device_probabilities.get('FL', 0) * number_ap)
+    a = int(round(device_probabilities.get('FL', 0) * number_ap))
     b = number_ap - a
     fl_list = [True] * a + [False] * b
-    a = round(device_probabilities.get('DL', 0) * number_ap)
+    a = int(round(device_probabilities.get('DL', 0) * number_ap))
     b = number_ap - a
     dl_list = [True] * a + [False] * b
-    a = round(device_probabilities.get('CUL', 0) * number_ap)
+    a = int(round(device_probabilities.get('CUL', 0) * number_ap))
     b = number_ap - a
     cul_list = [True] * a + [False] * b
-    a = round(device_probabilities.get('EV', 0) * number_ap)
+    a = int(round(device_probabilities.get('EV', 0) * number_ap))
     b = number_ap - a
     ev_list = [True] * a + [False] * b
 
-    a = round(device_probabilities.get('PV', 0) * number)
+    a = int(round(device_probabilities.get('PV', 0) * number))
     b = number - a
     pv_list = [True] * a + [False] * b
-    a = round(device_probabilities.get('BAT', 0) * number)
+    a = int(round(device_probabilities.get('BAT', 0) * number))
     b = number - a
     bat_list = [True] * a + [False] * b
 
