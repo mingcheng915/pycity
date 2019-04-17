@@ -64,6 +64,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
     n = 1 + len(nodes)
 
     iteration = 0
+    release_iteration = 0
     x_ = np.zeros(op_horizon)
     u = np.zeros(op_horizon)
     old_x_ = np.zeros(op_horizon)
@@ -86,7 +87,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
     best_Objective = None
     last_Binary_Solutions = {node_id: [] for node_id in nodes.keys()}
     fix_bounds_save = {node_id: {
-        v.VarName: {'lb': v.lb, 'ub': v.ub} for v in models[node_id].getVars() if v.VTpye == gurobi.GRB.BINARY
+        v.VarName: {'lb': v.lb, 'ub': v.ub} for v in models[node_id].getVars() if v.VType == gurobi.GRB.BINARY
     } for node_id in nodes.keys()}
 
     def fix_nodes():
@@ -123,12 +124,15 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
     # do optimization iterations until stopping criteria are met
     with TemporaryDirectory() as dirname:
         with mpi_context(procs=PROCS) as MPI_Workers:
-            while iteration > max_iterations:
+            while iteration < max_iterations:
 
                 iteration += 1
-
+                if mode == "release":
+                    release_iteration += 1
+                else:
+                    release_iteration = 0
                 np.copyto(old_x_, x_)
-                if mode == "realase" and iteration > SWITCH_COUNT:
+                if mode == "release" and release_iteration>=SWITCH_COUNT:
                     # Stable binary solution?
                     if all(all(last[0] != l
                                 for l in last[1:])
@@ -143,8 +147,8 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     else:
                         #Binary Solution not stable
                         rho *= 2
-
-                if r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
+                print(mode)
+                if r_norms[-1] <= eps_primal and s_norms[-1] <= eps_dual:
                     #save solutions if good
                     obj = city_district.get_objective().getValue()
                     for node in nodes.values():
@@ -155,6 +159,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                             model.write(dirname+model_id+".sol")
                     #remember solution
                     explored_Binary_Solutions.append(current_binary_solution())
+                    mode = "release"
                     release_nodes()
 
                 # -----------------
@@ -224,7 +229,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     if mode == "release":
                         last.append({})
                         for v in model.getVars():
-                            if v.VTpye == gurobi.GRB.BINARY:
+                            if v.VType == gurobi.GRB.BINARY:
                                 last[-1][v.VarName] = round(v.X)
                         last_Binary_Solutions[node_id] = last[-SWITCH_COUNT:]
 
@@ -301,7 +306,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     i1 += op_horizon
                 s_norms.append(np.linalg.norm(s))
                 if iteration_callback is not None:
-                    iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], mode=mode, best_obj = best_Objective)
+                    iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], mode=mode, best_obj = best_Objective, rho=rho)
 
             if best_Objective is None:
                 raise PyCitySchedulingMaxIteration(

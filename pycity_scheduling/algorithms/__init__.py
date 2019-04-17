@@ -13,7 +13,7 @@ algorithms = {
     "exchange-admm-mpi": exchange_admm_mpi,
     "central": central_optimization,
     "dual-decomposition": dual_decomposition,
-    "exchange_admm_r_and_f_mpi": exchange_admm_r_and_f_mpi
+    "exchange-admm-r-and-f-mpi": exchange_admm_r_and_f_mpi
 }
 
 __all__ = [
