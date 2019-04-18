@@ -93,15 +93,19 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
     def fix_nodes():
         for node_id in nodes.keys():
             for v in models[node_id].getVars():
-                if v.VTpye == gurobi.GRB.BINARY:
+                if v.VType == gurobi.GRB.BINARY:
                     l = last_Binary_Solutions[node_id][-1][v.VarName]
-                    v.ub = l
-                    v.lb = l
+                    if l == 1:
+                        v.lb = 1
+                    elif l == 0:
+                        v.ub = 0
+                    else:
+                        raise ValueError("Got unexpected binary Value: " + str(l))
     def release_nodes():
         for node_id in nodes.keys():
             for v in models[node_id].getVars():
-                if v.VTpye == gurobi.GRB.BINARY:
-                    f = fix_bounds_save[node_id][-1][v.VarName]
+                if v.VType == gurobi.GRB.BINARY:
+                    f = fix_bounds_save[node_id][v.VarName]
                     v.ub = f['ub']
                     v.lb = f['lb']
 
@@ -110,7 +114,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
         for node_id in nodes.keys():
             c = {}
             for v in models[node_id].getVars():
-                if v.VTpye == gurobi.GRB.BINARY:
+                if v.VType == gurobi.GRB.BINARY:
                     c[v.VarName] = round(v.X)
             current[node_id] = c
         return current
@@ -133,8 +137,9 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     release_iteration = 0
                 np.copyto(old_x_, x_)
                 if mode == "release" and release_iteration>=SWITCH_COUNT:
+                    release_iteration = 0
                     # Stable binary solution?
-                    if all(all(last[0] != l
+                    if all(all(last[0] == l
                                 for l in last[1:])
                             for last in last_Binary_Solutions.values()):
                         current = current_binary_solution()
@@ -147,7 +152,6 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     else:
                         #Binary Solution not stable
                         rho *= 2
-                print(mode)
                 if r_norms[-1] <= eps_primal and s_norms[-1] <= eps_dual:
                     #save solutions if good
                     obj = city_district.get_objective().getValue()
@@ -156,7 +160,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     if best_Objective is None or best_Objective > obj:
                         best_Objective = obj
                         for model_id, model in models.items():
-                            model.write(dirname+model_id+".sol")
+                            model.write(dirname+str(model_id)+".sol")
                     #remember solution
                     explored_Binary_Solutions.append(current_binary_solution())
                     mode = "release"
@@ -306,8 +310,12 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     i1 += op_horizon
                 s_norms.append(np.linalg.norm(s))
                 if iteration_callback is not None:
-                    iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], mode=mode, best_obj = best_Objective, rho=rho)
-
+                    changes = sum(any(last[0] != l
+                                for l in last[1:])
+                            for last in last_Binary_Solutions.values())
+                    iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], mode=mode, best_obj = best_Objective, rho=rho, changes=changes)
+            if mode == "fix":
+                release_nodes()
             if best_Objective is None:
                 raise PyCitySchedulingMaxIteration(
                         "Exceeded iteration limit of {0} iterations\n"
@@ -316,10 +324,9 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     )
             else:
                 #load solution
-                release_nodes()
                 for node_id in models.keys():
                     model = models[node_id]
-                    models[node_id].read(dirname+node_id+".sol")
+                    models[node_id].read(dirname+str(node_id)+".sol")
                     oldtime = model.Params.TimeLimit
                     model.Params.TimeLimit = 0.5
                     model.optimize()
