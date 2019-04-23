@@ -5,6 +5,7 @@ from .central_optimization_algortihm import central_optimization
 from .dual_decomposition_algortihm import dual_decomposition
 from .exchange_admm_algorithm_mpi import exchange_admm_mpi
 from .exchange_admm_r_and_f_mpi import exchange_admm_r_and_f_mpi
+from .integer_algorithm import integer
 
 algorithms = {
     "stand-alone": stand_alone_optimization,
@@ -13,7 +14,8 @@ algorithms = {
     "exchange-admm-mpi": exchange_admm_mpi,
     "central": central_optimization,
     "dual-decomposition": dual_decomposition,
-    "exchange-admm-r-and-f-mpi": exchange_admm_r_and_f_mpi
+    "exchange-admm-r-and-f-mpi": exchange_admm_r_and_f_mpi,
+    "integer": integer
 }
 
 __all__ = [
@@ -24,5 +26,6 @@ __all__ = [
     "central_optimization",
     "dual_decomposition",
     "algorithms",
-    "exchange_admm_r_and_f_mpi"
+    "exchange_admm_r_and_f_mpi",
+    "integer"
 ]
