@@ -1,5 +1,6 @@
 import numpy as np
 import gurobipy as gurobi
+import time
 
 from pycity_scheduling.classes import *
 from pycity_scheduling.exception import *
@@ -8,7 +9,7 @@ from pycity_scheduling.util import populate_models
 PROCS = 10
 
 def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
-                  eps_dual=1.0, rho=2.0, max_iterations=10000, iteration_callback=None):
+                  eps_dual=1.0, rho=2.0, max_iterations=10000, max_time=None, iteration_callback=None):
     from pycity_scheduling.util.mpi_optimize_nodes import mpi_context
     """Perform Exchange ADMM on a city district.
 
@@ -32,6 +33,8 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
         Stepsize for the ADMM algorithm.
     max_iterations : int, optional
         Maximum number of ADMM iterations.
+    max_time : float, optional
+        Maximum number of seconds to iterate.
 
     Returns
     -------
@@ -88,6 +91,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
 
     # do optimization iterations until stopping criteria are met
     with mpi_context(procs=PROCS) as MPI_Workers:
+        start_tick = time.monotonic()
         while r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
             iteration += 1
             if iteration > max_iterations:
@@ -95,6 +99,12 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                     "Exceeded iteration limit of {0} iterations\n"
                     "Norms were ||r|| =  {1}, ||s|| = {2}"
                     .format(max_iterations, r_norms[-1], s_norms[-1])
+                )
+            if max_time is not None and start_tick + max_time <= time.monotonic():
+                raise PyCitySchedulingMaxIteration(
+                    "Exceeded time limit of {0} seconds\n"
+                    "Norms were ||r|| =  {1}, ||s|| = {2}"
+                    .format(time.monotonic()-start_tick, r_norms[-1], s_norms[-1])
                 )
 
             np.copyto(old_x_, x_)
@@ -236,7 +246,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                 i1 += op_horizon
             s_norms.append(np.linalg.norm(s))
             if iteration_callback is not None:
-                iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1])
+                iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], time=time.monotonic() - start_tick)
 
         city_district.update_schedule()
         for entity in city_district.get_lower_entities():

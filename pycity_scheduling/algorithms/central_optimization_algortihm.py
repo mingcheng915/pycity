@@ -3,7 +3,7 @@ import gurobipy as gurobi
 from pycity_scheduling.util import populate_models
 
 
-def central_optimization(city_district, models=None, beta=1, iteration_callback=None):
+def central_optimization(city_district, models=None, beta=1, max_time=None, iteration_callback=None):
     """Implementation of the central optimization algorithm.
 
     Schedule all buildings together with respect to the aggregator objective.
@@ -19,6 +19,8 @@ def central_optimization(city_district, models=None, beta=1, iteration_callback=
     beta : float, optional
         Tradeoff factor between system and customer objective. The customer
         objective is multiplied with beta.
+    max_time : float, optional
+        Maximum number of seconds to iterate.
     """
 
     nodes = city_district.node
@@ -27,6 +29,8 @@ def central_optimization(city_district, models=None, beta=1, iteration_callback=
         models = populate_models(city_district, "central")
     model = models[0]
     city_district.update_model(model)
+    if max_time is not None:
+        model.setParam("TimeLimit", int(max_time))
 
     obj = gurobi.QuadExpr()
     for node_id, node in nodes.items():

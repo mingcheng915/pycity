@@ -5,6 +5,8 @@ class PyCitySchedulingException(Exception):
 class PyCitySchedulingMaxIteration(PyCitySchedulingException):
     """Exception raised, when number of maximum iterations is reached"""
 
+class PyCitySchedulingMaxTime(PyCitySchedulingException):
+    """Exception raised, when maximum time limit for iterations is reached"""
 
 class PyCitySchedulingGurobiException(PyCitySchedulingException):
     """Exception raised, when GurobiExceptions are encountered"""

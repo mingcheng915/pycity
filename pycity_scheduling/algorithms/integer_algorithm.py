@@ -5,6 +5,7 @@ from pycity_scheduling.classes import *
 from pycity_scheduling.exception import *
 from pycity_scheduling.util import populate_models
 from tempfile import TemporaryDirectory
+import time
 
 PROCS = 24
 
@@ -32,7 +33,7 @@ def get_obj_mod_lin(obj: gurobi.QuadExpr, cd_P_El_vars):
             lin_mod[i] += val
     return lin_mod
 
-def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000, iteration_callback=None):
+def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000, max_time=None, iteration_callback=None):
     """Perform Exchange ADMM on a city district.
 
     Do the scheduling of electrical energy in a city district using the
@@ -49,6 +50,8 @@ def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000,
         objective is multiplied with beta.
     max_iterations : int, optional
         Maximum number of ADMM iterations.
+    max_time : float, optional
+        Maximum number of seconds to iterate.
 
     Returns
     -------
@@ -93,12 +96,18 @@ def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000,
     from pycity_scheduling.util.mpi_optimize_nodes import mpi_context
     with TemporaryDirectory() as dirname:
         with mpi_context(procs=PROCS) as MPI_Workers:
+            start_tick = time.monotonic()
             while iteration < max_iterations:#TODO
                 iteration += 1
                 if iteration > max_iterations:
                     raise PyCitySchedulingMaxIteration(
                         "Exceeded iteration limit of {0} iterations"
                         .format(max_iterations)
+                    )
+                if max_time is not None and start_tick + max_time <= time.monotonic():
+                    raise PyCitySchedulingMaxIteration(
+                        "Exceeded time limit of {0} seconds\n"
+                        .format(time.monotonic() - start_tick)
                     )
 
                 # -----------------
@@ -230,7 +239,7 @@ def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000,
                     model.optimize()
                     model.Params.TimeLimit = oldtime
                 if iteration_callback is not None:
-                    iteration_callback(city_district, models)
+                    iteration_callback(city_district, models, time=time.monotonic() - start_tick)
 
     city_district.update_schedule()
     for entity in city_district.get_lower_entities():

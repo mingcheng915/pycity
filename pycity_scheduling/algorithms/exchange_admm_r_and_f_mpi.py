@@ -5,12 +5,13 @@ from pycity_scheduling.classes import *
 from pycity_scheduling.exception import *
 from pycity_scheduling.util import populate_models
 from tempfile import TemporaryDirectory
+import time
 
 PROCS = 10
 SWITCH_COUNT = 5
 
 def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
-                  eps_dual=1.0, rho=2.0, max_iterations=10000, iteration_callback=None):
+                  eps_dual=1.0, rho=2.0, max_iterations=10000, max_time=None, iteration_callback=None):
     from pycity_scheduling.util.mpi_optimize_nodes import mpi_context
     """Perform Exchange ADMM on a city district.
 
@@ -34,6 +35,8 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
         Stepsize for the ADMM algorithm.
     max_iterations : int, optional
         Maximum number of ADMM iterations.
+    max_time : float, optional
+        Maximum number of seconds to iterate.
 
     Returns
     -------
@@ -128,7 +131,8 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
     # do optimization iterations until stopping criteria are met
     with TemporaryDirectory() as dirname:
         with mpi_context(procs=PROCS) as MPI_Workers:
-            while iteration < max_iterations:
+            start_tick = time.monotonic()
+            while iteration < max_iterations and (max_time is None or start_tick + max_time > time.monotonic()):
 
                 iteration += 1
                 if mode == "release":
@@ -313,7 +317,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                     changes = sum(any(last[0] != l
                                 for l in last[1:])
                             for last in last_Binary_Solutions.values())
-                    iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], mode=mode, best_obj = best_Objective, rho=rho, changes=changes)
+                    iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], mode=mode, best_obj = best_Objective, rho=rho, changes=changes, time=time.monotonic() - start_tick)
             if mode == "fix":
                 release_nodes()
             if best_Objective is None:
