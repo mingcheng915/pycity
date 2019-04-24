@@ -231,7 +231,11 @@ def generate_tabula_buildings(environment,
         if len(power_curve) == 0:
             power_curve = [0]
         p_th_max = max(power_curve)/1000.0 + 1.0
-        heating_device = heating_list[i](environment, P_Th_Nom=p_th_max,
+        if heating_list[i] == ElectricalHeater:
+            heating_device = heating_list[i](environment, P_Th_Nom=p_th_max,
+                                             lowerActivationLimit=0)
+        else:
+            heating_device = heating_list[i](environment, P_Th_Nom=p_th_max,
                                          lowerActivationLimit=random.choice([0.5, 0.75, 1.0]))
         tes = ThermalEnergyStorage(environment, capacity=random.uniform(1.0, 2.0)*p_th_max/4180/40*3.6e6,
                                    SOC_Ini=0.5, SOC_End=0.5, tMax=60.0,
