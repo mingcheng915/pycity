@@ -9,7 +9,7 @@ import time
 
 PROCS = 10
 SWITCH_COUNT = 5
-
+RHO_FACTOR = 1.05
 def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                   eps_dual=1.0, rho=2.0, max_iterations=10000, max_time=None, iteration_callback=None):
     from pycity_scheduling.util.mpi_optimize_nodes import mpi_context
@@ -152,10 +152,10 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                             mode = "fix"
                             fix_nodes()
                         else:
-                            rho /= 2
+                            rho /= RHO_FACTOR
                     else:
                         #Binary Solution not stable
-                        rho *= 2
+                        rho *= RHO_FACTOR
                 if r_norms[-1] <= eps_primal and s_norms[-1] <= eps_dual:
                     #save solutions if good
                     obj = city_district.get_objective().getValue()
