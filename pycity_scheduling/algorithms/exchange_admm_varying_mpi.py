@@ -264,7 +264,7 @@ def exchange_admm_varying_mpi(city_district, models=None, beta=1.0, eps_primal=0
                 i1 += op_horizon
             s_norms.append(np.linalg.norm(s))
             if iteration_callback is not None:
-                iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], time=time.monotonic() - start_tick)
+                iteration_callback(city_district, models, r_norm=r_norms[-1], s_norm=s_norms[-1], rho=rho, time=time.monotonic() - start_tick)
 
         city_district.update_schedule()
         for entity in city_district.get_lower_entities():
