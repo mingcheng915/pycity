@@ -121,10 +121,10 @@ def exchange_admm_varying_mpi(city_district, models=None, beta=1.0, eps_primal=0
             np.copyto(old_x_, x_)
             #vary rho
             if iteration > 1:
-                if r_norms[-1]**2 > my*(s_norms[-1]**2):
+                if r_norms[-1] > my * s_norms[-1]:
                     rho *= tau_incr
                     u /= tau_incr
-                elif s_norms[-1]**2 > my*(r_norms[-1]**2):
+                elif s_norms[-1] > my * r_norms[-1]:
                     rho /= tau_decr
                     u *= tau_decr
             # -----------------
