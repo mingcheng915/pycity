@@ -32,6 +32,9 @@ def populate_models(city_district, algorithm, num_threads=4):
         m = gurobi.Model("central_algorithm_model")
         m.setParam("OutputFlag", False)
         m.setParam("LogFile", "")
+        m.setParam("TimeLimit", 24*60*60)
+        m.setParam("Heuristics", 0.9)
+        m.setParam("MIPFocus", 1)
         m.setParam("Threads", num_threads)
         P_El_var_list = []
         for node in nodes.values():
@@ -54,6 +57,9 @@ def populate_models(city_district, algorithm, num_threads=4):
             m = gurobi.Model(str(node_id) + " Scheduling Model")
             m.setParam("OutputFlag", False)
             #to garantee same results for mpi threads is set to 1
+            m.setParam("TimeLimit", 5*60)
+            m.setParam("Heuristics", 0.9)
+            m.setParam("MIPFocus", 1)
             m.setParam("Threads", 1)
             m.setParam("LogFile", "")
             node['entity'].populate_model(m)
