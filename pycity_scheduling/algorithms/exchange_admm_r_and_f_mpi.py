@@ -153,9 +153,11 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
                             fix_nodes()
                         else:
                             rho /= RHO_FACTOR
+                            u *= RHO_FACTOR
                     else:
                         #Binary Solution not stable
                         rho *= RHO_FACTOR
+                        u /= RHO_FACTOR
                 if r_norms[-1] <= eps_primal and s_norms[-1] <= eps_dual:
                     #save solutions if good
                     obj = city_district.get_objective().getValue()
