@@ -43,7 +43,7 @@ def central_optimization(city_district, models=None, beta=1, max_time=None, iter
     model.optimize()
 
     if iteration_callback is not None:
-        iteration_callback(city_district, models, time=model.Runtime)
+        iteration_callback(city_district, models, time=model.Runtime, bound=model.ObjBound)
 
     for node in city_district.node.values():
         entity = node['entity']
