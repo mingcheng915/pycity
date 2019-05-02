@@ -7,7 +7,6 @@ from pycity_scheduling.util import populate_models
 from tempfile import TemporaryDirectory
 import time
 
-PROCS = 10
 SWITCH_COUNT = 5
 RHO_FACTOR = 1.05
 def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
@@ -130,7 +129,7 @@ def exchange_admm_r_and_f_mpi(city_district, models=None, beta=1.0, eps_primal=0
 
     # do optimization iterations until stopping criteria are met
     with TemporaryDirectory() as dirname:
-        with mpi_context(procs=PROCS) as MPI_Workers:
+        with mpi_context() as MPI_Workers:
             start_tick = time.monotonic()
             while iteration < max_iterations and (max_time is None or start_tick + max_time > time.monotonic()):
 

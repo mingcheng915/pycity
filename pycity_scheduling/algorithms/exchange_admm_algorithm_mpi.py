@@ -6,7 +6,6 @@ from pycity_scheduling.classes import *
 from pycity_scheduling.exception import *
 from pycity_scheduling.util import populate_models
 
-PROCS = 10
 
 def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
                   eps_dual=1.0, rho=2.0, max_iterations=10000, max_time=None, iteration_callback=None):
@@ -90,7 +89,7 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
     # ----------------
 
     # do optimization iterations until stopping criteria are met
-    with mpi_context(procs=PROCS) as MPI_Workers:
+    with mpi_context() as MPI_Workers:
         start_tick = time.monotonic()
         while r_norms[-1] > eps_primal or s_norms[-1] > eps_dual:
             iteration += 1

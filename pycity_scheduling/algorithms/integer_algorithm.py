@@ -7,7 +7,6 @@ from pycity_scheduling.util import populate_models
 from tempfile import TemporaryDirectory
 import time
 
-PROCS = 24
 
 def get_obj_mod_lin(obj: gurobi.QuadExpr, cd_P_El_vars):
     horizon = len(cd_P_El_vars)
@@ -95,7 +94,7 @@ def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000,
     # do optimization iterations until stopping criteria are met
     from pycity_scheduling.util.mpi_optimize_nodes import mpi_context
     with TemporaryDirectory() as dirname:
-        with mpi_context(procs=PROCS) as MPI_Workers:
+        with mpi_context() as MPI_Workers:
             start_tick = time.monotonic()
             while iteration < max_iterations:#TODO
                 iteration += 1

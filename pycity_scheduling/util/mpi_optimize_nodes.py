@@ -104,9 +104,18 @@ class MPI_Models():
         return all_solutions
 
 class mpi_context:
-    def __init__(self, procs=20):
-        assert procs >= 1
-        self.comm = MPI.COMM_SELF.Spawn(sys.executable, args=['/home/uerlich/ba/pycity_scheduling/pycity_scheduling/util/mpi_optimize_nodes.py'], maxprocs=procs)
+        import warnings
+        kwargs = {}
+        if procs is not None:
+            kwargs["maxprocs"]=procs
+        else:
+            assert MPI.UNIVERSE_SIZE != MPI.KEYVAL_INVALID
+            kwargs["maxprocs"] = MPI.COMM_WORLD.Get_attr(MPI.UNIVERSE_SIZE)
+            kwargs["maxprocs"] -= MPI.COMM_WORLD.Get_size()
+            assert type(kwargs["maxprocs"]) == int
+            if kwargs["maxprocs"]>100:
+                warnings.warn("MPI Context received huge proc parameter: {}". format(kwargs["maxprocs"]))
+        self.comm = MPI.COMM_SELF.Spawn(sys.executable, args=['/home/uerlich/ba/pycity_scheduling/pycity_scheduling/util/mpi_optimize_nodes.py'], **kwargs)
         self.modules = MPI_Models(self.comm)
 
     def __enter__(self):
