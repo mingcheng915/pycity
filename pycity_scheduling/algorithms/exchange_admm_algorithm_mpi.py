@@ -144,9 +144,9 @@ def exchange_admm_mpi(city_district, models=None, beta=1.0, eps_primal=0.1,
 
             # to make recorded time not dependent on worker count time is stopped
             mpi_start = time.monotonic()
-            MPI_Workers.calculate(mpi_models)
+            _, runtimes = MPI_Workers.calculate(mpi_models)
             mpi_end = time.monotonic()
-            start_tick += (mpi_end - mpi_start) - max([model.Params.TimeLimit for model in mpi_models.values()])
+            start_tick += (mpi_end - mpi_start) - max(runtimes.values())
 
             for node_id, node in nodes.items():
                 entity = node['entity']

@@ -141,9 +141,9 @@ def integer(city_district, models=None, rho=0.5, beta=1.0, max_iterations=10000,
 
                 # to make recorded time not dependent on worker count time is stopped
                 mpi_start = time.monotonic()
-                MPI_Workers.calculate(mpi_models)
+                _, runtimes = MPI_Workers.calculate(mpi_models)
                 mpi_end = time.monotonic()
-                start_tick += (mpi_end - mpi_start) - max([model.Params.TimeLimit for model in mpi_models.values()])
+                start_tick += (mpi_end - mpi_start) - max(runtimes.values())
 
                 for node_id, node in nodes.items():
                     entity = node['entity']
