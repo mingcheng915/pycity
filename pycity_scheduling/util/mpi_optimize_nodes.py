@@ -82,6 +82,12 @@ class MPI_Models():
         self.__workers__ = list(range(self.__size__))
 
     def calculate(self, models):
+        """
+        Parameters
+        ----------
+        models : dict
+            Dict of gurobi models, that are to be optimized
+        """
         #send work out
         all_solutions = {model_id: [] for model_id in models.keys()}
         free = self.__workers__.copy()
@@ -104,6 +110,15 @@ class MPI_Models():
         return all_solutions
 
 class mpi_context:
+    """This Class provides support for distributing gurobi models to mpi workers."""
+    def __init__(self, procs=None):
+        """
+
+        Parameters
+        ----------
+        procs : int
+            Maximum Number of workers to spawn. Default to MPI universe size minus current world size.
+        """
         import warnings
         kwargs = {}
         if procs is not None:
