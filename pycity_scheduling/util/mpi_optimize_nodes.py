@@ -22,7 +22,7 @@ def unpack_model(data: dict) -> gurobi.Model:
         model.update()
         return model
 
-def unpack_results(data: dict, model: gurobi.Model):
+def unpack_results(data: dict, model: gurobi.Model) -> []:
     with tempfile.TemporaryDirectory() as dirname:
         assert 'sol' in data
         with open(dirname + "/tmp.hnt", 'w+') as f:
@@ -35,6 +35,7 @@ def unpack_results(data: dict, model: gurobi.Model):
         model.Params.TimeLimit = 0.5
         model.optimize()
         model.Params.TimeLimit = oldtime
+        return data.get("all_sols", [])
 
 
 def pack_model(model_id, model, solution=False) -> dict:
@@ -50,6 +51,17 @@ def pack_model(model_id, model, solution=False) -> dict:
             model.write(dirname + "/tmp.sol")
             with open(dirname + "/tmp.sol") as f:
                 tosend['sol'] = f.read()
+            tosend['all_sols'] = []
+            if model.solCount is not None and model.solCount>1:
+                for i in range(model.solCount):
+                    model.setParam("SolutionNumber", i)
+                    sol_i = {v.VarName: v.xn for v in model.getVars()}
+                    sol_i["obj"] = model.PoolObjVal
+                    tosend['all_sols'].append(sol_i)
+            else:
+                sol_0 = {v.VarName: v.X for v in model.getVars()}
+                sol_0["obj"] = model.ObjVal
+                tosend['all_sols'].append(sol_0)
         else:
             model.write(dirname + "/tmp.mps")
             with open(dirname + "/tmp.mps") as f:
@@ -71,12 +83,13 @@ class MPI_Models():
 
     def calculate(self, models):
         #send work out
+        all_solutions = {model_id: [] for model_id in models.keys()}
         free = self.__workers__.copy()
         for model_id, model in models.items():
             if len(free) == 0:#wait to receive results from a worker
                 info = MPI.Status()
                 recv = self.__comm__.recv(tag=12, source=MPI.ANY_SOURCE, status=info)
-                unpack_results(recv, models[recv['id']])
+                all_solutions[recv['id']] = unpack_results(recv, models[recv['id']])
                 free.append(info.Get_source())
             tosend = pack_model(model_id, model, False)
             assert tosend is not None
@@ -86,8 +99,9 @@ class MPI_Models():
         for worker in self.__workers__:
             if worker not in free:
                 recv = self.__comm__.recv(tag=12, source=MPI.ANY_SOURCE)
-                unpack_results(recv, models[recv['id']])
+                all_solutions[recv['id']] = unpack_results(recv, models[recv['id']])
         print("finished calculation")
+        return all_solutions
 
 class mpi_context:
     def __init__(self, procs=20):
