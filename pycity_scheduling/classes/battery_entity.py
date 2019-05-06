@@ -44,6 +44,7 @@ class BatteryEntity(ElectricalEntity):
         self.E_El_Schedule = np.zeros(self.simu_horizon)
         self.P_El_Demand_vars = []
         self.P_El_Supply_vars = []
+        self.P_El_bvars = [] #0 for discharging, 1 for charging
         self.E_El_Ref_Schedule = np.zeros(self.simu_horizon)
 
     def populate_model(self, model, mode=""):
@@ -75,6 +76,13 @@ class BatteryEntity(ElectricalEntity):
                          % (self._long_ID, t + 1)
                 )
             )
+            self.P_El_bvars.append(
+                model.addVar(
+                    vtype=gurobi.GRB.BINARY,
+                    name="%s_E_El_op_at_t=%i"
+                         % (self._long_ID, t + 1)
+                )
+            )
             self.P_El_Supply_vars.append(
                 model.addVar(
                     ub=self.P_El_Max_Discharge,
@@ -94,6 +102,14 @@ class BatteryEntity(ElectricalEntity):
             model.addConstr(
                 self.P_El_vars[t]
                 == self.P_El_Demand_vars[t] - self.P_El_Supply_vars[t]
+            )
+            model.addConstr(
+                self.P_El_Demand_vars[t]
+                <= self.P_El_bvars[t]*self.P_El_Max_Charge
+            )
+            model.addConstr(
+                self.P_El_Supply_vars[t]
+                <= (1-self.P_El_bvars[t]) * self.P_El_Max_Discharge
             )
 
     def update_schedule(self, mode=""):
