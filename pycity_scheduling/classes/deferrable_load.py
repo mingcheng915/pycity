@@ -53,7 +53,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.P_El_bvars = []
         self.P_El_Sum_constrs = []
 
-    def populate_model(self, model, mode=""):
+    def populate_model(self, model, mode="convex"):
         """Add variables and constraints to Gurobi model
 
         Call parent's `populate_model` method and set the upper bounds to the
@@ -65,35 +65,16 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         ----------
         model : gurobi.Model
         mode : str, optional
+            Specifies which set of constraints to use
+            - `convex`  : Use linear constraints
+            - `integer`  : TODO implement
         """
         super(DeferrableLoad, self).populate_model(model, mode)
-
-        # device is on or off
-        if mode == "Binary":
-            self.P_El_bvars = []
-
-            # Add variables:
-            for t in self.op_time_vec:
-                self.P_El_bvars.append(
-                    model.addVar(
-                        vtype=gurobi.GRB.BINARY,
-                        name="%s_binary_at_t=%i"
-                             % (self._long_ID, t+1)
-                    )
-                )
-            model.update()
-
-            # Set additional constraints:
-            for t in self.op_time_vec:
-                model.addConstr(
-                    self.P_El_vars[t] <= self.P_El_bvars[t] * 1000000
-                )
-            model.addConstr(
-                gurobi.quicksum(
-                    (self.P_El_bvars[t] - self.P_El_bvars[t+1])
-                    * (self.P_El_bvars[t] - self.P_El_bvars[t+1])
-                    for t in range(self.op_horizon - 1))
-                <= 2
+        if mode == "convex":
+            pass
+        else:
+            raise ValueError(
+                "Mode %s is not implemented by deferrable load." % str(mode)
             )
 
     def update_model(self, model, mode=""):
