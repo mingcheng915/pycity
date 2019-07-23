@@ -199,6 +199,121 @@ class TestBuilding(unittest.TestCase):
         self.assertEqual(1100, co2)
 
 
+class TestCurtailableLoad(unittest.TestCase):
+    combinations = [(4, 1), (3, 1), (2, 1), (1, 1), (2, 2), (3, 1)]
+    horizon = 5
+    def setUp(self):
+        self.e = get_env(5, 20)
+    def test_populate_model(self):
+        model = gp.Model('CLModel')
+        cl = CurtailableLoad(self.e, 2, 0.5)
+        cl.populate_model(model)
+        obj = gp.quicksum(cl.P_El_vars)
+        model.setObjective(obj)
+        model.optimize()
+        cl.update_schedule()
+        self.assertAlmostEqual(5, obj.getValue())
+        self.assertTrue(
+            5, sum(cl.P_El_Schedule[:5]))
+
+    def test_populate_model_on_off(self):
+        model = gp.Model('CLModel')
+        cl = CurtailableLoad(self.e, 2, 0.5, 2, 2)
+        cl.populate_model(model)
+        obj = gp.quicksum(cl.P_El_vars)
+        model.setObjective(obj)
+        model.optimize()
+        cl.update_schedule()
+        self.assertAlmostEqual(5, obj.getValue())
+        self.assertTrue(
+            np.array_equal(np.full(5, True), cl.P_State_schedule[:5])
+        )
+        self.assertAlmostEqual(5, sum(cl.P_El_Schedule[:5]))
+
+    def test_populate_model_integer(self):
+        for off, on in self.combinations:
+            min_states = sum(np.tile([False]*off + [True]*on, 5)[:5])
+            for nom in [0.5, 1, 2]:
+                with self.subTest(msg="max_off={} min_on={} nom={}".format(off, on, nom)):
+                    model = gp.Model('CLModel')
+                    cl = CurtailableLoad(self.e, nom, 0.75, off, on)
+                    cl.populate_model(model, mode="integer")
+                    obj = gp.quicksum(cl.P_El_vars)
+                    model.setObjective(obj)
+                    model.optimize()
+                    cl.update_schedule()
+                    schedule_states = np.isclose(cl.P_El_Schedule[:5], [nom]*5)
+                    self.assertTrue(
+                        np.array_equal(schedule_states, cl.P_State_schedule[:5])
+                    )
+                    self.assertEqual(min_states, sum(schedule_states))
+                    self.assertAlmostEqual(min_states*nom+(5-min_states)*nom*0.75, obj.getValue())
+
+    def test_update_model(self):
+        for width in [1, 2, 4, 5]:
+            with self.subTest(msg="step width={}".format(width)):
+                model = gp.Model('CLModel')
+                cl = CurtailableLoad(self.e, 2, 0.5)
+                cl.populate_model(model)
+                obj = gp.quicksum(cl.P_El_vars)
+                model.setObjective(obj)
+                for t in range(0, 20-5+1, width):
+                    self.e.timer.currentTimestep = t
+                    cl.upate_model(model)
+                    model.optimize()
+                    cl.update_schedule()
+                    self.assertAlmostEqual(5, obj.getValue())
+                    self.assertAlmostEqual(5, sum(cl.P_El_Schedule[t:t+5]))
+
+    def test_update_model_on_off(self):
+        for off, on in self.combinations:
+            for width in [1, 2, 4, 5]:
+                with self.subTest(msg="max_off={} min_on={} step width={}".format(off, on, width)):
+                    model = gp.Model('CLModel')
+                    cl = CurtailableLoad(self.e, 2, 0.5)
+                    cl.populate_model(model)
+                    obj = gp.quicksum(cl.P_El_vars)
+                    model.setObjective(obj)
+                    for t in range(0, 16-4+1, width):
+                        self.e.timer.currentTimestep = t
+                        cl.upate_model(model)
+                        model.optimize()
+                        cl.update_schedule()
+                        self.assertAlmostEqual(5, obj.getValue())
+                        self.assertAlmostEqual(5, sum(cl.P_El_Schedule[t:t+5]))
+
+    def test_update_model_integer(self):
+        for off, on in self.combinations:
+            states = np.tile([False] * off + [True] * on, 20)[:20]
+            for width in [1, 2, 4, 5]:
+                with self.subTest(msg="max_off={} min_on={} step width={}".format(off, on, width)):
+                    model = gp.Model('CLModel')
+                    cl = CurtailableLoad(self.e, 2, 0.5, off, on)
+                    cl.populate_model(model, mode="integer")
+                    obj = gp.quicksum(cl.P_El_vars)
+                    model.setObjective(obj)
+                    for t in range(0, 20-5+1, width):
+                        self.e.timer.currentTimestep = t
+                        obj = gp.quicksum(cl.P_El_vars)
+                        obj += cl.get_objective(coeff=1)
+                        model.setObjective(obj)
+                        model.optimize()
+                        cl.update_schedule()
+                        schedule_states = np.isclose(cl.P_El_Schedule[t:t+5], [2] * 5)
+                        self.assertTrue(
+                            np.array_equal(schedule_states[t:t+5], cl.P_State_schedule[t:t+5])
+                        )
+                        self.assertTrue(
+                            np.array_equal(states[t:t+5], schedule_states[t:t+5])
+                        )
+                        self.assertTrue(np.allclose(
+                            cl.P_El_Schedule[t:t+5],
+                            np.full(5, 2 * 0.5) + np.array(states[t:t+5]) * (2 * (1. - 0.5))
+                        ))
+
+    def test_zero_off_time(self):
+        pass
+
 class TestCityDistrict(unittest.TestCase):
     def setUp(self):
         e = get_env(4, 8)
