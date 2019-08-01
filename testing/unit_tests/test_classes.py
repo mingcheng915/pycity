@@ -224,19 +224,16 @@ class TestCurtailableLoad(unittest.TestCase):
         model.setObjective(obj)
         model.optimize()
         cl.update_schedule()
-        self.assertAlmostEqual(5, obj.getValue())
-        self.assertTrue(
-            np.array_equal(np.full(5, True), cl.P_State_schedule[:5])
-        )
-        self.assertAlmostEqual(5, sum(cl.P_El_Schedule[:5]))
+        self.assertAlmostEqual(7, obj.getValue())
+        self.assertAlmostEqual(7, sum(cl.P_El_Schedule[:5]))
 
     def test_populate_model_integer(self):
-        for off, on in self.combinations:
-            min_states = sum(np.tile([False]*off + [True]*on, 5)[:5])
+        for low, full in self.combinations:
+            min_states = sum(np.tile([False]*low + [True]*full, 5)[:5])
             for nom in [0.5, 1, 2]:
-                with self.subTest(msg="max_off={} min_on={} nom={}".format(off, on, nom)):
+                with self.subTest(msg="max_low={} min_full={} nom={}".format(low, full, nom)):
                     model = gp.Model('CLModel')
-                    cl = CurtailableLoad(self.e, nom, 0.75, off, on)
+                    cl = CurtailableLoad(self.e, nom, 0.75, low, full)
                     cl.populate_model(model, mode="integer")
                     obj = gp.quicksum(cl.P_El_vars)
                     model.setObjective(obj)
@@ -266,9 +263,9 @@ class TestCurtailableLoad(unittest.TestCase):
                     self.assertAlmostEqual(5, sum(cl.P_El_Schedule[t:t+5]))
 
     def test_update_model_on_off(self):
-        for off, on in self.combinations:
+        for low, full in self.combinations:
             for width in [1, 2, 4, 5]:
-                with self.subTest(msg="max_off={} min_on={} step width={}".format(off, on, width)):
+                with self.subTest(msg="max_low={} min_full={} step width={}".format(low, full, width)):
                     model = gp.Model('CLModel')
                     cl = CurtailableLoad(self.e, 2, 0.5)
                     cl.populate_model(model)
@@ -283,28 +280,34 @@ class TestCurtailableLoad(unittest.TestCase):
                         self.assertAlmostEqual(5, sum(cl.P_El_Schedule[t:t+5]))
 
     def test_update_model_integer(self):
-        for off, on in self.combinations:
-            states = np.tile([False] * off + [True] * on, 20)[:20]
+        for low, full in self.combinations:
+            states = np.tile([False] * low + [True] * full, 20)[:20]
             for width in [1, 2, 4, 5]:
-                with self.subTest(msg="max_off={} min_on={} step width={}".format(off, on, width)):
+                with self.subTest(msg="max_low={} min_full={} step width={}".format(low, full, width)):
                     model = gp.Model('CLModel')
-                    cl = CurtailableLoad(self.e, 2, 0.5, off, on)
+                    cl = CurtailableLoad(self.e, 2, 0.5, low, full)
                     cl.populate_model(model, mode="integer")
                     obj = gp.quicksum(cl.P_El_vars)
                     model.setObjective(obj)
                     for t in range(0, 20-5+1, width):
                         self.e.timer.currentTimestep = t
+                        cl.upate_model(model)
                         obj = gp.quicksum(cl.P_El_vars)
-                        obj += cl.get_objective(coeff=1)
+                        obj += cl.get_objective(coeff_flex=0.2)
                         model.setObjective(obj)
+                        for i, var in enumerate(cl.P_State_vars):
+                            var.lb = states[t+i]
+                            var.ub = states[t+i]
                         model.optimize()
+                        self.assertEqual(model.Status, 2)
                         cl.update_schedule()
-                        schedule_states = np.isclose(cl.P_El_Schedule[t:t+5], [2] * 5)
+                        schedule_states_el = np.isclose(cl.P_El_Schedule[t:t+5], [2] * 5)
+                        schedule_states_b = np.isclose(cl.P_State_schedule[t:t+5], [1] * 5)
                         self.assertTrue(
-                            np.array_equal(schedule_states[t:t+5], cl.P_State_schedule[t:t+5])
+                            np.array_equal(schedule_states_el, schedule_states_b)
                         )
                         self.assertTrue(
-                            np.array_equal(states[t:t+5], schedule_states[t:t+5])
+                            np.array_equal(states[t:t+5], schedule_states_b)
                         )
                         self.assertTrue(np.allclose(
                             cl.P_El_Schedule[t:t+5],
