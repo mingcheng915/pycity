@@ -200,7 +200,8 @@ class TestBuilding(unittest.TestCase):
 
 
 class TestCurtailableLoad(unittest.TestCase):
-    combinations = [(4, 1), (3, 1), (2, 1), (1, 1), (2, 2), (3, 1)]
+    combinations = [(4, 1), (3, 1), (2, 1), (1, 1), (2, 2), (3, 1),
+                    (0, 1), (0, 2), (0, 3), (0, 4)]
     horizon = 5
     def setUp(self):
         self.e = get_env(5, 20)
@@ -267,17 +268,23 @@ class TestCurtailableLoad(unittest.TestCase):
             for width in [1, 2, 4, 5]:
                 with self.subTest(msg="max_low={} min_full={} step width={}".format(low, full, width)):
                     model = gp.Model('CLModel')
-                    cl = CurtailableLoad(self.e, 2, 0.5)
+                    cl = CurtailableLoad(self.e, 2, 0.5, low, full)
                     cl.populate_model(model)
                     obj = gp.quicksum(cl.P_El_vars)
                     model.setObjective(obj)
-                    for t in range(0, 16-4+1, width):
+                    for t in range(0, 20-5+1, width):
                         self.e.timer.currentTimestep = t
                         cl.upate_model(model)
                         model.optimize()
                         cl.update_schedule()
-                        self.assertAlmostEqual(5, obj.getValue())
-                        self.assertAlmostEqual(5, sum(cl.P_El_Schedule[t:t+5]))
+
+                    endtimestep = self.e.timer.currentTimestep + cl.op_horizon
+                    for t in range(0, endtimestep):
+                        self.assertGreaterEqual(cl.P_El_Schedule[t], 1)
+                        self.assertLessEqual(cl.P_El_Schedule[t], 2)
+                    for t in range(0, endtimestep-(low+full)+1):
+                        self.assertGreaterEqual(sum(cl.P_El_Schedule[t:t+low+full]),
+                                                1*low + 2*full)
 
     def test_update_model_integer(self):
         for low, full in self.combinations:
@@ -314,8 +321,6 @@ class TestCurtailableLoad(unittest.TestCase):
                             np.full(5, 2 * 0.5) + np.array(states[t:t+5]) * (2 * (1. - 0.5))
                         ))
 
-    def test_zero_off_time(self):
-        pass
 
 class TestCityDistrict(unittest.TestCase):
     def setUp(self):

@@ -134,7 +134,7 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
             else:
                 # generate relaxed constraints with max_off min_on values
                 width = self.min_full + self.max_low
-                for t in self.op_time_vec[:-width]:
+                for t in self.op_time_vec[:-width + 1]:
                     next_vars = self.P_El_vars[t:t + width]
                     assert len(next_vars) == width
                     model.addConstr(
@@ -204,7 +204,7 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
                 # no resets are required, because previously modified RHSs will be modified
                 # again
                 width = self.min_full + self.max_low
-                for t in range(max(0, timestep - width + 1), timestep, step=1):
+                for t in range(max(0, timestep - width + 1), timestep, 1):
                     # calculate the required power between previous and current timesteps
                     required = self.P_El_Nom * self.min_full + self.P_El_Curt * self.max_low
                     # calculate already consumed power
@@ -216,10 +216,9 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
 
     def update_schedule(self):
         super(CurtailableLoad, self).update_schedule()
-        if len(self.constr_previous_state) > 0:
-            timestep = self.timer.currentTimestep
-            self.P_State_schedule[timestep:timestep + self.op_horizon] \
-                = [np.isclose(var.X, self.P_El_Nom) for var in self.P_El_vars]
+        timestep = self.timer.currentTimestep
+        self.P_State_schedule[timestep:timestep + self.op_horizon] \
+            = [np.isclose(var.X, self.P_El_Nom) for var in self.P_El_vars]
 
     def get_objective(self, coeff=None, coeff_flex=None):
         """Objective function for entity level scheduling.
