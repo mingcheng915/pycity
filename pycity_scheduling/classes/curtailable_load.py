@@ -294,7 +294,7 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
             # constant to the flex_obj term
             A[:, 0] = np.ones(width)
 
-            coeffs, _, _, _ = np.linalg.lstsq(A, score, rcond=None)
+            coeffs, _, _, _ = np.linalg.lstsq(A, score, rcond=-1)
 
             flex_obj = gurobi.LinExpr()
             flex_obj += coeffs[0]
