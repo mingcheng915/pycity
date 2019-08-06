@@ -413,45 +413,75 @@ class TestCombinedHeatPower(unittest.TestCase):
 
 class TestDeferrableLoad(unittest.TestCase):
     def setUp(self):
-        e = get_env(6, 9)
+        self.e = get_env(6, 9)
         self.lt = [0, 1, 1, 1, 0, 1, 1, 1, 0]
-        self.dl = DeferrableLoad(e, 19, 10, load_time=self.lt)
 
     def test_update_model(self):
+        dl = DeferrableLoad(self.e, 19, 10, load_time=self.lt)
         model = gp.Model('DLModel')
-        self.dl.populate_model(model)
+        dl.populate_model(model)
         obj = gp.QuadExpr()
         obj.addTerms(
             [1] * 6,
-            self.dl.P_El_vars,
-            self.dl.P_El_vars
+            dl.P_El_vars,
+            dl.P_El_vars
         )
         model.setObjective(obj)
-        self.dl.update_model(model)
+        dl.update_model(model)
         model.optimize()
 
-        self.assertAlmostEqual(10 * 4/3, gp.quicksum(self.dl.P_El_vars).getValue() * self.dl.time_slot, places=5)
+        self.assertAlmostEqual(10 * 4/3, gp.quicksum(dl.P_El_vars).getValue() * dl.time_slot, places=5)
 
-        self.dl.timer.mpc_update()
-        self.dl.update_model(model)
+        dl.timer.mpc_update()
+        dl.update_model(model)
         model.optimize()
 
         for t, c in enumerate(self.lt[1:7]):
             if c:
-                self.assertEqual(19, self.dl.P_El_vars[t].ub)
+                self.assertEqual(19, dl.P_El_vars[t].ub)
             else:
-                self.assertEqual(0, self.dl.P_El_vars[t].ub)
-        self.assertAlmostEqual(13.333333, self.dl.P_El_vars[4].x, places=5)
-        self.assertAlmostEqual(13.333333, self.dl.P_El_vars[5].x, places=5)
+                self.assertEqual(0, dl.P_El_vars[t].ub)
+        self.assertAlmostEqual(13.333333, dl.P_El_vars[4].x, places=5)
+        self.assertAlmostEqual(13.333333, dl.P_El_vars[5].x, places=5)
 
-        self.dl.timer.mpc_update()
-        self.dl.timer.mpc_update()
-        self.dl.P_El_Schedule[1] = 15
-        self.dl.P_El_Schedule[2] = 15
-        self.dl.update_model(model)
+        dl.timer.mpc_update()
+        dl.timer.mpc_update()
+        dl.P_El_Schedule[1] = 15
+        dl.P_El_Schedule[2] = 15
+        dl.update_model(model)
         model.optimize()
 
-        self.assertAlmostEqual(10, self.dl.P_El_vars[0].x, places=5)
+        self.assertAlmostEqual(10, dl.P_El_vars[0].x, places=5)
+
+    def test_update_model_integer(self):
+        dl = DeferrableLoad(self.e, 19, 9.5 - 1e-6, load_time=self.lt)
+        model = gp.Model('DLModel')
+        dl.populate_model(model, mode="integer")
+        obj = gp.QuadExpr()
+        obj.addTerms(
+            [0] * 2 + [1] * 2 + [0] * 2,
+            dl.P_El_vars,
+            dl.P_El_vars
+        )
+        model.setObjective(obj)
+        dl.update_model(model, mode="integer")
+        model.optimize()
+        dl.update_schedule()
+
+        self.assertTrue(np.array_equal(
+            dl.P_El_Schedule[:6],
+            [0, 19, 19, 0, 0, 19]
+        ))
+        for _ in range(3):
+            dl.timer.mpc_update()
+            dl.update_model(model, mode="integer")
+            model.optimize()
+            dl.update_schedule()
+
+        self.assertTrue(np.array_equal(
+            dl.P_El_Schedule,
+            [0, 19, 19, 0, 0, 0, 19, 19, 0]
+        ))
 
 
 class TestFixedLoad(unittest.TestCase):
