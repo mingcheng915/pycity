@@ -483,6 +483,22 @@ class TestDeferrableLoad(unittest.TestCase):
             [0, 19, 19, 0, 0, 0, 19, 19, 0]
         ))
 
+    def test_update_model_integer_small_horizon(self):
+        e = get_env(1, 9)
+        dl = DeferrableLoad(e, 19, 9.5, load_time=self.lt)
+        model = gp.Model('DLModel')
+        dl.populate_model(model, mode="integer")
+        for _ in range(8):
+            dl.update_model(model, mode="integer")
+            model.optimize()
+            dl.update_schedule()
+            dl.timer.mpc_update()
+
+        self.assertTrue(np.array_equal(
+            dl.P_El_Schedule,
+            [0, 19, 19, 0, 0, 19, 19, 0, 0]
+        ))
+
 
 class TestFixedLoad(unittest.TestCase):
     def setUp(self):
