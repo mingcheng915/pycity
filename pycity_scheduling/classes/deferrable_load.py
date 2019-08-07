@@ -86,7 +86,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                      "P_El_Nom * dt, which is larger than E_Min_Consumption")
             self.runtime = int(np.ceil(self.runtime))
 
-            # create binary variables representing if operation has begins in timeslot t
+            # create binary variables representing if operation begins in timeslot t
             for t in self.op_time_vec:
                 self.P_Start_vars.append(model.addVar(
                     vtype=gurobi.GRB.BINARY,
@@ -96,7 +96,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
             model.update()
 
             for t in self.op_time_vec:
-                # coupling the start variable to the electrical variable
+                # coupling the start variable to the electrical variables following
                 self.P_Start_constrs.append(model.addConstr(
                     self.P_El_vars[t] == self.P_El_Nom * gurobi.quicksum(
                         self.P_Start_vars[max(0, t+1-self.runtime):t+1]
@@ -168,9 +168,11 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                 pass
             del self.P_El_Sum_constrs[:]
 
-            # count completed load
             timestep = self.timestep
-            load_time = self.load_time[self.timer.currentTimestep: self.timer.currentTimestep + self.op_horizon + self.runtime -1]
+            load_time = self.load_time[self.timer.currentTimestep:
+                                       self.timer.currentTimestep + self.op_horizon + self.runtime - 1]
+
+            # count completed load in first block from previous timesteps
             completed_ts = 0
             for c in reversed(self.P_El_Schedule[:timestep]):
                 if np.isclose(c, 0):
@@ -178,11 +180,11 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                 else:
                     completed_ts += 1
 
-            # set new starts to run
+            # check if device is already running in first block
             first_completed = completed_ts > 0
 
             if first_completed:
-                # set P_El from last start
+                # set P_El values in accordance with start in previous timesteps
                 for t in self.op_time_vec:
                     if 0 <= t < self.runtime - completed_ts:
                         assert load_time[t]
@@ -190,6 +192,8 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                     else:
                         self.P_Start_constrs[t].RHS = 0
 
+            # calculate all ranges in which a start has to happen
+            # sets ub to 1 in these ranges and to 0 otherwise
             to_run_ranges = []
             completed = first_completed
             for t in self.op_time_vec:
@@ -205,6 +209,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                 else:
                     self.P_Start_vars[t].ub = 0
 
+            # add a constraint requiring a start in all ranges previously calculated
             for block in to_run_ranges:
                 self.P_El_Sum_constrs.append(model.addConstr(
                     1 == gurobi.quicksum(self.P_Start_vars[block["first"]:block["last"]+1])
