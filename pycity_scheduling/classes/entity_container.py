@@ -1,4 +1,5 @@
-import gurobipy as gurobi
+import numpy as np
+import pyomo.environ as pyomo
 
 from .thermal_entity import ThermalEntity
 from .electrical_entity import ElectricalEntity
@@ -23,6 +24,7 @@ class EntityContainer(ThermalEntity, ElectricalEntity):
             - `integer`  : Use same constraints as convex mode
         """
         super().populate_model(model, mode)
+        m = self.model
 
         if mode in ["convex", "integer"]:
             P_Th_var_list = []
@@ -34,19 +36,16 @@ class EntityContainer(ThermalEntity, ElectricalEntity):
                 if isinstance(entity, ElectricalEntity):
                     P_El_var_list.extend(entity.P_El_vars)
 
-            for t in self.op_time_vec:
-                self.P_Th_vars[t].lb = -gurobi.GRB.INFINITY
-                self.P_El_vars[t].lb = -gurobi.GRB.INFINITY
-                P_Th_var_sum = gurobi.quicksum(P_Th_var_list[t::self.op_horizon])
-                P_El_var_sum = gurobi.quicksum(P_El_var_list[t::self.op_horizon])
-                model.addConstr(
-                    self.P_Th_vars[t] == P_Th_var_sum,
-                    "{0:s}_P_Th_at_t={1}".format(self._long_ID, t + 1)
-                )
-                model.addConstr(
-                    self.P_El_vars[t] == P_El_var_sum,
-                    "{0:s}_P_El_t={1}".format(self._long_ID, t + 1)
-                )
+            m.P_Th_vars.setlb(None)
+            m.P_El_vars.setlb(None)
+
+            def p_th_sum_rule(model, t):
+                return model.P_Th_vars[t] == pyomo.sum_product(P_Th_var_list[t::self.op_horizon])
+            m.p_th_constr = pyomo.Constraint(m.t, rule=p_th_sum_rule)
+
+            def p_el_sum_rule(model, t):
+                return model.P_El_vars[t] == pyomo.sum_product(P_El_var_list[t::self.op_horizon])
+            m.p_el_constr = pyomo.Constraint(m.t, rule=p_el_sum_rule)
         else:
             raise ValueError(
                 "Mode %s is not implemented by EntityContainer." % str(mode)

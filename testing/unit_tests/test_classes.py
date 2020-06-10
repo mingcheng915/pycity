@@ -2,6 +2,8 @@ import datetime
 import unittest
 
 import numpy as np
+import pyomo.environ as pyomo
+from pyomo.opt import SolverStatus, TerminationCondition
 from shapely.geometry import Point
 import gurobipy as gp
 
@@ -242,26 +244,26 @@ class TestCurtailableLoad(unittest.TestCase):
     def setUp(self):
         self.e = get_env(5, 20)
     def test_populate_model(self):
-        model = gp.Model('CLModel')
+        model = pyomo.ConcreteModel()
         cl = CurtailableLoad(self.e, 2, 0.5)
         cl.populate_model(model)
-        obj = gp.quicksum(cl.P_El_vars)
-        model.setObjective(obj)
-        model.optimize()
+        obj = pyomo.sum_product(cl.model.P_El_vars)
+        model.o = pyomo.Objective(expr=obj)
+        solve_model(model)
         cl.update_schedule()
-        self.assertAlmostEqual(5, obj.getValue())
+        self.assertAlmostEqual(5, pyomo.value(obj))
         self.assertTrue(
             5, sum(cl.P_El_Schedule[:5]))
 
     def test_populate_model_on_off(self):
-        model = gp.Model('CLModel')
+        model = pyomo.ConcreteModel()
         cl = CurtailableLoad(self.e, 2, 0.5, 2, 2)
         cl.populate_model(model)
-        obj = gp.quicksum(cl.P_El_vars)
-        model.setObjective(obj)
-        model.optimize()
+        obj = pyomo.sum_product(cl.model.P_El_vars)
+        model.o = pyomo.Objective(expr=obj)
+        solve_model(model)
         cl.update_schedule()
-        self.assertAlmostEqual(7, obj.getValue())
+        self.assertAlmostEqual(7, pyomo.value(obj))
         self.assertAlmostEqual(7, sum(cl.P_El_Schedule[:5]))
 
     def test_populate_model_integer(self):
@@ -269,47 +271,49 @@ class TestCurtailableLoad(unittest.TestCase):
             min_states = sum(np.tile([False]*low + [True]*full, 5)[:5])
             for nom in [0.5, 1, 2]:
                 with self.subTest(msg="max_low={} min_full={} nom={}".format(low, full, nom)):
-                    model = gp.Model('CLModel')
+                    model = pyomo.ConcreteModel()
                     cl = CurtailableLoad(self.e, nom, 0.75, low, full)
                     cl.populate_model(model, mode="integer")
-                    obj = gp.quicksum(cl.P_El_vars)
-                    model.setObjective(obj)
-                    model.optimize()
+                    obj = pyomo.sum_product(cl.model.P_El_vars)
+                    model.o = pyomo.Objective(expr=obj)
+                    results = solve_model(model)
                     cl.update_schedule()
                     schedule_states = np.isclose(cl.P_El_Schedule[:5], [nom]*5)
                     assert_equal_array(cl.P_State_Schedule[:5], schedule_states)
                     self.assertEqual(min_states, sum(schedule_states))
-                    self.assertAlmostEqual(min_states*nom+(5-min_states)*nom*0.75, obj.getValue())
+                    self.assertAlmostEqual(min_states*nom+(5-min_states)*nom*0.75, pyomo.value(obj))
 
     def test_update_model(self):
         for width in [1, 2, 4, 5]:
             with self.subTest(msg="step width={}".format(width)):
-                model = gp.Model('CLModel')
+                model = pyomo.ConcreteModel()
                 cl = CurtailableLoad(self.e, 2, 0.5)
                 cl.populate_model(model)
-                obj = gp.quicksum(cl.P_El_vars)
-                model.setObjective(obj)
+                obj = pyomo.sum_product(cl.model.P_El_vars)
+                model.o = pyomo.Objective(expr=obj)
+                solve_model(model)
                 for t in range(0, 20-5+1, width):
                     self.e.timer.currentTimestep = t
                     cl.update_model(model)
-                    model.optimize()
+                    solve_model(model)
                     cl.update_schedule()
-                    self.assertAlmostEqual(5, obj.getValue())
+                    self.assertAlmostEqual(5, pyomo.value(obj))
                     self.assertAlmostEqual(5, sum(cl.P_El_Schedule[t:t+5]))
 
     def test_update_model_on_off(self):
         for low, full in self.combinations:
             for width in [1, 2, 4, 5]:
                 with self.subTest(msg="max_low={} min_full={} step width={}".format(low, full, width)):
-                    model = gp.Model('CLModel')
+                    model = pyomo.ConcreteModel()
                     cl = CurtailableLoad(self.e, 2, 0.5, low, full)
                     cl.populate_model(model)
-                    obj = gp.quicksum(cl.P_El_vars)
-                    model.setObjective(obj)
+                    obj = pyomo.sum_product(cl.model.P_El_vars)
+                    model.o = pyomo.Objective(expr=obj)
+                    solve_model(model)
                     for t in range(0, 20-5+1, width):
                         self.e.timer.currentTimestep = t
                         cl.update_model(model)
-                        model.optimize()
+                        solve_model(model)
                         cl.update_schedule()
 
                     endtimestep = self.e.timer.currentTimestep + cl.op_horizon
@@ -325,20 +329,25 @@ class TestCurtailableLoad(unittest.TestCase):
             states = np.tile([False] * low + [True] * full, 20)[:20]
             for width in [1, 2, 4, 5]:
                 with self.subTest(msg="max_low={} min_full={} step width={}".format(low, full, width)):
-                    model = gp.Model('CLModel')
+                    model = pyomo.ConcreteModel()
                     cl = CurtailableLoad(self.e, 2, 0.5, low, full)
                     cl.populate_model(model, mode="integer")
-                    obj = gp.quicksum(cl.P_El_vars)
-                    model.setObjective(obj)
+                    obj = pyomo.sum_product(cl.model.P_El_vars)
                     for t in range(0, 20-5+1, width):
                         self.e.timer.currentTimestep = t
                         cl.update_model(model, mode="integer")
-                        model.setObjectiveN(gp.quicksum(cl.P_El_vars), 0, 10)
-                        # move full steps towards the end
-                        model.setObjectiveN(gp.quicksum([-i * cl.P_El_vars[i] for i in range(5)]), 1, 5)
-                        model.setParam("MIPGap", 1e-6)
-                        model.optimize()
-                        self.assertEqual(model.Status, 2)
+                        model.o = pyomo.Objective(expr=obj)
+                        results = solve_model(model)
+                        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+                        best_obj = pyomo.value(obj)
+                        model.o_constr = pyomo.Constraint(expr=best_obj == obj)
+                        model.del_component("o")
+                        model.o = pyomo.Objective(expr=pyomo.sum_product(range(0, -cl.op_horizon, -1),
+                                                                         cl.model.P_El_vars))
+                        results = solve_model(model)
+                        model.del_component("o")
+                        model.del_component("o_constr")
+                        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
                         cl.update_schedule()
                         schedule_states_el = np.isclose(cl.P_El_Schedule[t:t+5], [2] * 5)
                         schedule_states_b = np.isclose(cl.P_State_Schedule[t:t+5], [1] * 5)
@@ -353,7 +362,7 @@ class TestCurtailableLoad(unittest.TestCase):
         for low, full in self.combinations:
             if low > 0:
                 with self.subTest(msg="max_low={} min_full={}".format(low, full)):
-                    model = gp.Model('CLModel')
+                    model = pyomo.ConcreteModel()
 
                     cl = CurtailableLoad(self.e, 2, 0.5, low, full)
                     cl.populate_model(model, mode="integer")
@@ -362,16 +371,17 @@ class TestCurtailableLoad(unittest.TestCase):
                     cl.P_El_Schedule[0] = 1
                     cl.update_model(model, "integer")
 
-                    cl.P_State_vars[0].ub = 1
-                    cl.P_State_vars[0].lb = 1
-                    cl.P_State_vars[1].ub = 0
-                    cl.P_State_vars[1].lb = 0
+                    cl.model.P_State_vars[0].setub(1)
+                    cl.model.P_State_vars[0].setlb(1)
+                    cl.model.P_State_vars[1].setub(0)
+                    cl.model.P_State_vars[1].setlb(0)
 
-                    model.optimize()
+                    model.o = pyomo.Objective(expr=0)
+                    results = solve_model(model)
                     if full > 1:
-                        self.assertEqual(model.status, 3)
+                        self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
                     else:
-                        self.assertEqual(model.status, 2)
+                        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
 
     def test_small_horizon(self):
         for width in [1, 2, 4]:
@@ -379,17 +389,17 @@ class TestCurtailableLoad(unittest.TestCase):
                 if horizon >= width:
                     with self.subTest(msg="width={} horizon={}".format(width, horizon)):
                         e = get_env(horizon, 20)
-                        model = gp.Model('CLModel')
+                        model = pyomo.ConcreteModel()
                         cl = CurtailableLoad(e, 2, 0.5)
                         cl.populate_model(model)
                         for t in range(0, 21 - horizon, width):
                             e.timer.currentTimestep = t
                             cl.update_model(model)
-                            obj = gp.quicksum(cl.P_El_vars)
-                            model.setObjective(obj)
-                            model.optimize()
+                            obj = pyomo.sum_product(cl.model.P_El_vars)
+                            model.o = pyomo.Objective(expr=obj)
+                            solve_model(model)
 
-                            self.assertEqual(1, cl.P_El_vars[0].x)
+                            self.assertEqual(1, pyomo.value(cl.model.P_El_vars[0]))
 
                             cl.update_schedule()
 
@@ -404,16 +414,15 @@ class TestCurtailableLoad(unittest.TestCase):
                         with self.subTest(msg="width={} horizon={} max_low={} min_full={}"
                                               .format(width, horizon, low, full)):
 
-                            model = gp.Model('CLModel')
+                            model = pyomo.ConcreteModel()
                             cl = CurtailableLoad(e, 2, 0.5, low, full)
                             cl.populate_model(model)
+                            obj = pyomo.sum_product(cl.model.P_El_vars)
+                            model.c = pyomo.Objective(expr=obj)
                             for t in range(0, 21 - horizon, width):
                                 e.timer.currentTimestep = t
                                 cl.update_model(model)
-                                obj = gp.quicksum(cl.P_El_vars)
-                                model.setObjective(obj)
-                                model.setParam("MIPGap", 1e-6)
-                                model.optimize()
+                                solve_model(model)
                                 cl.update_schedule()
 
                             for t in range(0, 20 - (low + full) + 1):
@@ -430,17 +439,25 @@ class TestCurtailableLoad(unittest.TestCase):
                     for low, full in self.combinations:
                         with self.subTest(msg="width={} horizon={} max_low={} min_full={}".format(width, horizon, low, full)):
                             states = np.tile([1] * low + [2] * full, 20)[:20]
-                            model = gp.Model('CLModel')
+                            model = pyomo.ConcreteModel()
                             cl = CurtailableLoad(e, 2, 0.5, low, full)
                             cl.populate_model(model, mode="integer")
+                            obj = pyomo.sum_product(cl.model.P_El_vars)
                             for t in range(0, 21 - horizon, width):
                                 e.timer.currentTimestep = t
                                 cl.update_model(model, mode="integer")
-                                model.setObjectiveN(gp.quicksum(cl.P_El_vars), 0, 10)
-                                # move full steps towards the end
-                                model.setObjectiveN(gp.quicksum([-i*cl.P_El_vars[i] for i in range(horizon)]), 1, 5)
-                                model.setParam("MIPGap", 1e-6)
-                                model.optimize()
+                                model.o = pyomo.Objective(expr=obj)
+                                results = solve_model(model)
+                                self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+                                best_obj = pyomo.value(obj)
+                                model.o_constr = pyomo.Constraint(expr=best_obj == obj)
+                                model.del_component("o")
+                                model.o = pyomo.Objective(expr=pyomo.sum_product(range(0, -cl.op_horizon, -1),
+                                                                                 cl.model.P_El_vars))
+                                results = solve_model(model)
+                                model.del_component("o")
+                                model.del_component("o_constr")
+                                self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
                                 cl.update_schedule()
 
                             assert_equal_array(cl.P_El_Schedule, states)
@@ -581,67 +598,64 @@ class TestDeferrableLoad(unittest.TestCase):
 
     def test_update_model(self):
         dl = DeferrableLoad(self.e, 19, 10, load_time=self.lt)
-        model = gp.Model('DLModel')
+        model = pyomo.ConcreteModel()
         dl.populate_model(model)
-        obj = gp.QuadExpr()
-        obj.addTerms(
-            [1] * 6,
-            dl.P_El_vars,
-            dl.P_El_vars
-        )
-        model.setObjective(obj)
+        obj = pyomo.sum_product(dl.model.P_El_vars, dl.model.P_El_vars)
+        model.o = pyomo.Objective(expr=obj)
         dl.update_model(model)
-        model.optimize()
+        solve_model(model)
 
-        self.assertAlmostEqual(10, gp.quicksum(dl.P_El_vars).getValue() * dl.time_slot, places=5)
+        self.assertAlmostEqual(10, pyomo.value(pyomo.sum_product(dl.model.P_El_vars)) * dl.time_slot, places=5)
 
         dl.timer.mpc_update()
         dl.update_model(model)
-        model.optimize()
+        solve_model(model)
 
         for t, c in enumerate(self.lt[1:7]):
             if c == 1:
-                self.assertEqual(19, dl.P_El_vars[t].ub)
+                self.assertEqual(19, dl.model.P_El_vars[t].ub)
             else:
-                self.assertEqual(0, dl.P_El_vars[t].ub)
+                self.assertEqual(0, dl.model.P_El_vars[t].ub)
         dl.update_schedule()
         assert_equal_array(dl.P_El_Schedule[:7], [0, 8, 8, 8, 0, 8, 8])
 
     def test_infeasible_consumption(self):
         feasible = DeferrableLoad(self.e, 10, 10, load_time=self.lt)
-        m = gp.Model('DLFeasable')
+        m = pyomo.ConcreteModel()
         feasible.populate_model(m)
         feasible.update_model(m)
-        m.optimize()
-        self.assertEqual(m.status, 2)
+        obj = pyomo.sum_product(feasible.model.P_El_vars)
+        m.o = pyomo.Objective(expr=obj)
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
 
-        m = gp.Model('DLInfesable')
+        m = pyomo.ConcreteModel()
         infeasible = DeferrableLoad(self.e, 10, 10.6, load_time=self.lt)
         infeasible.populate_model(m)
         infeasible.update_model(m)
-        m.optimize()
-        self.assertEqual(m.status, 3)
+        obj = pyomo.sum_product(infeasible.model.P_El_vars)
+        m.o = pyomo.Objective(expr=obj)
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
     def test_update_model_integer(self):
         dl = DeferrableLoad(self.e, 19, 9.5, load_time=self.lt)
-        model = gp.Model('DLModel')
-        dl.populate_model(model, mode="integer")
-        obj = gp.QuadExpr()
-        obj.addTerms(
-            [0] * 2 + [1] * 2 + [0] * 2,
-            dl.P_El_vars,
-            dl.P_El_vars
-        )
-        model.setObjective(obj)
-        dl.update_model(model, mode="integer")
-        model.optimize()
+        m = pyomo.ConcreteModel()
+        dl.populate_model(m, mode="integer")
+
+        obj = pyomo.sum_product([0] * 2 + [1] * 2 + [0] * 2, dl.model.P_El_vars, dl.model.P_El_vars)
+        m.o = pyomo.Objective(expr=obj)
+        dl.update_model(m, mode="integer")
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
         dl.update_schedule()
 
         assert_equal_array(dl.P_El_Schedule[:6], [0, 19, 19, 0, 0, 0])
         for _ in range(3):
             dl.timer.mpc_update()
-            dl.update_model(model, mode="integer")
-            model.optimize()
+            dl.update_model(m, mode="integer")
+            results = solve_model(m)
+            self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
             dl.update_schedule()
 
         assert_equal_array(dl.P_El_Schedule, [0, 19, 19, 0, 0, 0, 19, 19, 0])
@@ -649,25 +663,31 @@ class TestDeferrableLoad(unittest.TestCase):
     def test_infeasible_integer(self):
         e = get_env(1, 9)
         dl = DeferrableLoad(e, 19, 9.5, load_time=self.lt)
-        model = gp.Model('DLModel')
+        model = pyomo.ConcreteModel()
         dl.populate_model(model, mode="integer")
         dl.update_model(model, mode="integer")
-        model.optimize()
-        self.assertEqual(model.status, 3)
+        obj = pyomo.sum_product(dl.model.P_El_vars)
+        model.o = pyomo.Objective(expr=obj)
+        results = solve_model(model)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
         dl = DeferrableLoad(self.e, 19, 19, load_time=self.lt)
-        model = gp.Model('DLModel')
+        model = pyomo.ConcreteModel()
         dl.populate_model(model, mode="integer")
         dl.update_model(model, mode="integer")
-        model.optimize()
-        self.assertEqual(model.status, 3)
+        obj = pyomo.sum_product(dl.model.P_El_vars)
+        model.o = pyomo.Objective(expr=obj)
+        results = solve_model(model)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
         dl = DeferrableLoad(self.e, 19, 19*3/4, load_time=self.lt)
-        model = gp.Model('DLModel')
+        model = pyomo.ConcreteModel()
         dl.populate_model(model, mode="integer")
         dl.update_model(model, mode="integer")
-        model.optimize()
-        self.assertEqual(model.status, 2)
+        obj = pyomo.sum_product(dl.model.P_El_vars)
+        model.o = pyomo.Objective(expr=obj)
+        results = solve_model(model)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
         dl.update_schedule()
         assert_equal_array(dl.P_El_Schedule[:6], [0, 19, 19, 19, 0, 0])
 
@@ -1072,3 +1092,7 @@ def assert_equal_array(a: np.ndarray, expected):
         expected = np.array(expected)
         msg = "Array {} does not equal expected array {}".format(np.array2string(a), np.array2string(expected))
         raise AssertionError(msg)
+
+def solve_model(model):
+    opt = pyomo.SolverFactory('gurobi')
+    return opt.solve(model)

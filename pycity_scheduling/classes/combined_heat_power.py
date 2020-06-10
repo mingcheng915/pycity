@@ -1,5 +1,5 @@
 import numpy as np
-import gurobipy as gurobi
+import pyomo.environ as pyomo
 import pycity_base.classes.supply.CHP as chp
 
 from .thermal_entity import ThermalEntity
@@ -44,7 +44,7 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         self.P_Th_Nom = P_Th_nom
         self.new_var("P_State", dtype=np.bool, func=lambda t: self.P_Th_vars[t].x > 0.01*P_Th_nom)
 
-    def populate_model(self, model, mode="convex"):
+    def populate_model(self, mode="convex"):
         """Add variables and constraints to Gurobi model.
 
         Call both parents' `populate_model` methods and set the upper bounds
@@ -60,15 +60,14 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
             - `convex`  : Use linear constraints
             - `integer`  : Use integer variables representing discrete control decisions
         """
-        super().populate_model(model, mode)
+        super().populate_model(mode)
+        m = self.model
 
         if mode in ["convex", "integer"]:
-            for var in self.P_Th_vars:
-                var.lb = -self.P_Th_Nom
-                var.ub = 0
-            for var in self.P_El_vars:
-                var.lb = -self.P_Th_Nom
-                var.ub = 0
+            m.P_Th_vars.setlb(-self.P_Th_Nom)
+            m.P_Th_vars.setub(0)
+            m.P_El_vars.setlb(-self.P_Th_Nom)
+            m.P_El_vars.setub(0)
 
         # original function
         # 'qubic' -> would not work with Gurobi
@@ -85,35 +84,26 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         #     for t in self.op_time_vec
         #     ]
 
-            for t in self.op_time_vec:
-                model.addConstr(
-                    self.P_Th_vars[t] * self.sigma == self.P_El_vars[t]
-                )
+            def p_coupl_rule(model, t):
+                return model.P_Th_vars[t] * self.sigma == model.P_El_vars[t]
+
+            m.P_coupl_constr = pyomo.Constraint(m.t, rule=p_coupl_rule)
             if mode == "integer" and self.lowerActivationLimit != 0.0:
                 # Add additional binary variables representing operating state
-                for t in self.op_time_vec:
-                    self.P_State_vars.append(
-                        model.addVar(
-                            vtype=gurobi.GRB.BINARY,
-                            name="%s_Mode_at_t=%i"
-                                 % (self._long_ID, t + 1)
-                        )
-                    )
-                model.update()
+                m.P_State_vars = pyomo.Var(m.t, domain=pyomo.Binary)
 
-                for t in self.op_time_vec:
-                    # Couple state to operating variable
-                    model.addConstr(
-                        self.P_Th_vars[t]
-                        >= -self.P_State_vars[t] * self.P_Th_Nom
-                    )
-                    model.addConstr(
-                        self.P_Th_vars[t]
-                        <= -self.P_State_vars[t] * self.P_Th_Nom * self.lowerActivationLimit
-                    )
-                    # Remove redundant limits of P_Th_vars
-                    self.P_Th_vars[t].lb = -gurobi.GRB.INFINITY
-                    self.P_Th_vars[t].ub = gurobi.GRB.INFINITY
+                # Couple state to operating variable
+                def p_state_rule(model, t):
+                    return model.P_Th_vars[t] >= -model.P_State_vars[t] * self.P_Th_Nom
+                m.P_state_constr = pyomo.Constraint(m.t, rule=p_state_rule)
+
+                def p_activation_rule(model, t):
+                    return model.P_Th_vars[t] <= -model.P_State_vars[t] * self.P_Th_Nom * self.lowerActivationLimit
+                m.P_activation_rule = pyomo.Constraint(m.t, rule=p_activation_rule)
+
+                # Remove redundant limits of P_Th_vars
+                m.P_Th_vars.setlb(None)
+                m.P_Th_vars.setub(None)
         else:
             raise ValueError(
                 "Mode %s is not implemented by CHP." % str(mode)

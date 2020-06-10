@@ -1,3 +1,6 @@
+import numpy as np
+import pyomo.environ as pyomo
+
 import pycity_base.classes.demand.SpaceHeating as sh
 
 from .thermal_entity import ThermalEntity
@@ -104,10 +107,8 @@ class SpaceHeating(ThermalEntity, sh.SpaceHeating):
         model : gurobi.Model
         mode : str, optional
         """
-        timestep = self.timestep
-        for t in self.op_time_vec:
-            self.P_Th_vars[t].lb = self.P_Th_Schedule[t+timestep]
-            self.P_Th_vars[t].ub = self.P_Th_Schedule[t+timestep]
+        self.P_Th_vars.setlb(self.P_Th_Schedule[self.op_slice])
+        self.P_Th_vars.setub(self.P_Th_Schedule[self.op_slice])
 
     def new_schedule(self, schedule):
         super().new_schedule(schedule)

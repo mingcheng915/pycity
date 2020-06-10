@@ -1,5 +1,6 @@
 import numpy as np
-import gurobipy as gurobi
+import pyomo.environ as pyomo
+
 import pycity_base.classes.supply.PV as pv
 
 from .electrical_entity import ElectricalEntity
@@ -54,13 +55,13 @@ class Photovoltaic(ElectricalEntity, pv.PV):
         self.P_El_Supply = self.totalPower[ts:ts+self.simu_horizon] / 1000
 
     def update_model(self, model, mode=""):
-        timestep = self.timestep
-        for t in self.op_time_vec:
-            self.P_El_vars[t].lb = -self.P_El_Supply[t+timestep]
-            if self.force_renewables:
-                self.P_El_vars[t].ub = -self.P_El_Supply[t+timestep]
-            else:
-                self.P_El_vars[t].ub = 0
+        m = self.model
+
+        m.P_El_vars.setlb(-self.P_El_Supply[self.op_slice])
+        if self.force_renewables:
+            m.P_El_vars.setub(-self.P_El_Supply[self.op_slice])
+        else:
+            m.P_El_vars.setub(0)
 
     def get_objective(self, coeff=1):
         """Objective function of the Photovoltaic.
@@ -80,15 +81,8 @@ class Photovoltaic(ElectricalEntity, pv.PV):
         gurobi.QuadExpr :
             Objective function.
         """
-        obj = gurobi.QuadExpr()
-        if not self.force_renewables:
-            obj.addTerms(
-                [coeff]*self.op_horizon,
-                self.P_El_vars,
-                self.P_El_vars
-            )
-            obj.addTerms(
-                - 2*coeff*self.P_El_Supply[self.op_slice],
-                self.P_El_vars
-            )
-        return obj
+        m = self.model
+
+        s = pyomo.sum_product(m.P_El_vars, m.P_El_vars)
+        s += -2 * pyomo.sum_product(m.P_El_Supply[self.op_slice], m.P_El_vars)
+        return coeff * s

@@ -1,4 +1,5 @@
-import gurobipy as gurobi
+import numpy as np
+import pyomo.environ as pyomo
 import pycity_base.classes.CityDistrict as cd
 
 from .electrical_entity import ElectricalEntity
@@ -31,7 +32,7 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
         self.objective = objective
         self.valley_profile = valley_profile
 
-    def populate_model(self, model, mode="convex"):
+    def populate_model(self, mode="convex"):
         """Add variables and constraints to Gurobi model.
 
         Call parent's `populate_model` methods and set variables lower
@@ -45,11 +46,11 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
             - `convex`  : Use linear constraints
             - `integer`  : Use same constraints as convex mode
         """
-        super().populate_model(model, mode)
+        super().populate_model(mode)
+        m = self.model
 
         if mode in ["convex", "integer"]:
-            for var in self.P_El_vars:
-                var.lb = -gurobi.GRB.INFINITY
+            m.P_El_vars.setlb(None)
         else:
             raise ValueError(
                 "Mode %s is not implemented by city district." % str(mode)
@@ -57,29 +58,17 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
 
     def get_objective(self, coeff=1):
         if self.objective == 'valley-filling':
-            obj = gurobi.QuadExpr()
-            obj.addTerms(
-                [1] * self.op_horizon,
-                self.P_El_vars,
-                self.P_El_vars
-            )
+            e = coeff * pyomo.sum_product(self.model.P_El_vars, self.model.P_El_vars)
             valley = self.valley_profile[self.op_slice]
-            obj.addTerms(
-                2 * valley,
-                self.P_El_vars
-            )
-            return obj
+            return 2 * coeff * pyomo.sum_product(valley, self.model.P_El_vars, start=e)
         elif self.objective == 'price':
-            obj = gurobi.LinExpr()
             prices = self.environment.prices.da_prices[self.op_slice]
             s = sum(abs(prices))
             if s > 0:
                 prices = prices * self.op_horizon / s
-                obj.addTerms(
-                    coeff * prices,
-                    self.P_El_vars
-                )
-            return obj
+                return pyomo.sum_product(prices, self.model.P_El_vars)
+            else:
+                return 0
         return super().get_objective(coeff)
 
     def get_lower_entities(self):
