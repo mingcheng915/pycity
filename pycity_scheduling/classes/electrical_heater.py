@@ -36,7 +36,6 @@ class ElectricalHeater(ThermalEntity, ElectricalEntity, eh.ElectricalHeater):
         super().__init__(environment, P_Th_nom*1000, eta, 55, lower_activation_limit)
         self._long_ID = "EH_" + self._ID_string
         self.P_Th_Nom = P_Th_nom
-        self.new_var("P_State", dtype=np.bool, func=lambda t: self.P_Th_vars[t].x > 0.01*P_Th_nom)
         self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
 
     def populate_model(self, model, mode="convex"):

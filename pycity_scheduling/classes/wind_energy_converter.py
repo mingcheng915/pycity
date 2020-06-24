@@ -48,12 +48,14 @@ class WindEnergyConverter(ElectricalEntity, wec.WindEnergyConverter):
 
     def update_model(self, model, mode=""):
         m = self.model
+        timestep = self.timestep
 
-        m.P_El_vars.setlb(-self.P_El_Supply[self.op_slice])
-        if self.force_renewables:
-            m.P_El_vars.setub(-self.P_El_Supply[self.op_slice])
-        else:
-            m.P_El_vars.setub(0)
+        for t in self.op_time_vec:
+            m.P_El_vars[t].setlb(-self.P_El_Supply[timestep + t])
+            if self.force_renewables:
+                m.P_El_vars[t].setub(-self.P_El_Supply[timestep + t])
+            else:
+                m.P_El_vars[t].setub(0)
 
     def get_objective(self, coeff=1):
         """Objective function of the WindEnergyConverter.

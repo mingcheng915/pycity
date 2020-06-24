@@ -102,7 +102,7 @@ class Building(EntityContainer, bd.Building):
         m = self.model
 
         def p_equality_rule(model, t):
-            0 == model.P_Th_vars[t]
+            return 0 == model.P_Th_vars[t]
         m.P_equality_constr = pyomo.Constraint(m.t, rule=p_equality_rule)
 
         if robustness is not None and self.bes.hasTes:
@@ -112,9 +112,7 @@ class Building(EntityContainer, bd.Building):
 
     def update_model(self, model, mode="", robustness=None):
         super().update_model(model, mode)
-        model.update()
 
-        #TODO pyomoify
         if robustness is not None and self.bes.hasTes:
             self._update_robust_constraints(model, robustness)
 
@@ -127,7 +125,7 @@ class Building(EntityContainer, bd.Building):
 
         def e_lower_rule(model, t):
             return tes_m.E_Th_vars[t] >= model.lower_robustness_bounds[t]
-        m.upper_robustness_constr = pyomo.Constraint(m.t, rule=e_lower_rule)
+        m.lower_robustness_constr = pyomo.Constraint(m.t, rule=e_lower_rule)
 
         def e_upper_rule(model, t):
             return tes_m.E_Th_vars[t] <= model.upper_robustness_bounds[t]

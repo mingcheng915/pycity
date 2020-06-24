@@ -89,7 +89,7 @@ class OptimizationEntity(object):
     def populate_model(self, model, mode=""):
         # generate empty pyomo block
         self.model = pyomo.Block()
-        setattr(model, self._ID_string, self.model)
+        setattr(model, "_".join([self._kind, self._ID_string]), self.model)
         # add time
         self.model.t = pyomo.RangeSet(0, self.op_horizon-1)
 
@@ -107,7 +107,7 @@ class OptimizationEntity(object):
         for name, schedule in self.schedule.items():
             if name in self.__var_funcs__ and not hasattr(self.model, name + "_vars"):
                 func = self.__var_funcs__[name]
-                values = np.fromiter((func(t) for t in self.op_time_vec), dtype=schedule.dtype)
+                values = np.fromiter((func(self.model, t) for t in self.op_time_vec), dtype=schedule.dtype)
             else:
                 values = np.fromiter(getattr(self.model, name + "_vars").extract_values().values(), dtype=schedule.dtype)
             if schedule.dtype == np.bool: # TODO is this still needed?

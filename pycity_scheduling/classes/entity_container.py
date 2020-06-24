@@ -32,19 +32,19 @@ class EntityContainer(ThermalEntity, ElectricalEntity):
             for entity in self.get_lower_entities():
                 entity.populate_model(model, mode)
                 if isinstance(entity, ThermalEntity):
-                    P_Th_var_list.extend(entity.P_Th_vars)
+                    P_Th_var_list.append(entity.model.P_Th_vars)
                 if isinstance(entity, ElectricalEntity):
-                    P_El_var_list.extend(entity.P_El_vars)
+                    P_El_var_list.append(entity.model.P_El_vars)
 
             m.P_Th_vars.setlb(None)
             m.P_El_vars.setlb(None)
 
             def p_th_sum_rule(model, t):
-                return model.P_Th_vars[t] == pyomo.sum_product(P_Th_var_list[t::self.op_horizon])
+                return model.P_Th_vars[t] == pyomo.quicksum(P_Th_var[t] for P_Th_var in P_Th_var_list)
             m.p_th_constr = pyomo.Constraint(m.t, rule=p_th_sum_rule)
 
             def p_el_sum_rule(model, t):
-                return model.P_El_vars[t] == pyomo.sum_product(P_El_var_list[t::self.op_horizon])
+                return model.P_El_vars[t] == pyomo.quicksum(P_El_var[t] for P_El_var in P_El_var_list)
             m.p_el_constr = pyomo.Constraint(m.t, rule=p_el_sum_rule)
         else:
             raise ValueError(

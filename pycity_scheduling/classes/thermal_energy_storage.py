@@ -71,18 +71,18 @@ class ThermalEnergyStorage(ThermalEntity, tes.ThermalEnergyStorage):
 
             m.E_Th_vars = pyomo.Var(m.t, domain=pyomo.NonNegativeReals, bounds=(0, self.E_Th_Max), initialize=0)
 
-            m.E_El_ini = pyomo.Param(default=self.SOC_Ini * self.E_El_Max, mutable=True)
+            m.E_Th_ini = pyomo.Param(default=self.SOC_Ini * self.E_Th_Max, mutable=True)
 
             def e_rule(model, t):
-                E_El_last = model.E_El_vars[t - 1] if t >= 1 else model.E_El_ini
-                return model.E_El_vars[t] == E_El_last * (1 - self.Th_Loss_coeff) + m.P_Th_vars[t] * self.time_slot == 0
+                E_Th_last = model.E_Th_vars[t - 1] if t >= 1 else model.E_Th_ini
+                return model.E_Th_vars[t] == E_Th_last * (1 - self.Th_Loss_coeff) + m.P_Th_vars[t] * self.time_slot
             m.E_constr = pyomo.Constraint(m.t, rule=e_rule)
 
             def e_end_rule(model):
                 if self.storage_end_equality:
-                    return model.E_El_vars[self.op_horizon-1] == self.E_El_Max * self.SOC_Ini
+                    return model.E_Th_vars[self.op_horizon-1] == self.E_Th_Max * self.SOC_Ini
                 else:
-                    return model.E_El_vars[self.op_horizon-1] >= self.E_El_Max * self.SOC_Ini
+                    return model.E_Th_vars[self.op_horizon-1] >= self.E_Th_Max * self.SOC_Ini
             m.E_end_constr = pyomo.Constraint(rule=e_end_rule)
 
         else:

@@ -107,8 +107,12 @@ class SpaceHeating(ThermalEntity, sh.SpaceHeating):
         model : gurobi.Model
         mode : str, optional
         """
-        self.P_Th_vars.setlb(self.P_Th_Schedule[self.op_slice])
-        self.P_Th_vars.setub(self.P_Th_Schedule[self.op_slice])
+        m = self.model
+        timestep = self.timestep
+
+        for t in self.op_time_vec:
+            m.P_Th_vars.setlb(self.P_Th_Schedule[timestep + t])
+            m.P_Th_vars.setub(self.P_Th_Schedule[timestep + t])
 
     def new_schedule(self, schedule):
         super().new_schedule(schedule)
