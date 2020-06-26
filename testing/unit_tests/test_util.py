@@ -1,7 +1,8 @@
 import unittest
 
 import numpy as np
-import gurobipy as gp
+import pyomo.environ as pyomo
+from pyomo.opt import SolverStatus, TerminationCondition
 
 import pycity_scheduling.util as util
 from pycity_scheduling.classes import *
@@ -54,11 +55,17 @@ class TestFactory(unittest.TestCase):
                                          type(e) == all_entities[d_id]))
             self.assertEqual(amount_mfh, sum(1 for b in mfhs for e in b.get_entities() if
                                          type(e) == all_entities[d_id]))
+
+        m = util.populate_models(district, "convex", "central", None)[0]
+        district.update_model(m, "convex")
+        for node_id, node in district.nodes.items():
+            node['entity'].update_model(m, "convex")
+        m.o = pyomo.Objective(expr=district.get_objective())
+
         # check feasibility
-        m = util.populate_models(district, "central")[0]
-        m.setObjective(0)
-        m.optimize()
-        self.assertEqual(2, m.status)
+        opt = pyomo.SolverFactory('gurobi')
+        results = opt.solve(m)
+        self.assertEqual(TerminationCondition.optimal, results.solver.termination_condition)
 
 
 

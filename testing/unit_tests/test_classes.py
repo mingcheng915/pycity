@@ -1,17 +1,14 @@
 import datetime
 import unittest
+import logging
 
 import numpy as np
 import pyomo.environ as pyomo
 from pyomo.opt import SolverStatus, TerminationCondition
 from shapely.geometry import Point
-import gurobipy as gp
 
 from pycity_scheduling.classes import *
 from pycity_scheduling.util.metric import *
-
-
-gp.setParam('outputflag', 0)
 
 
 class TestModule(unittest.TestCase):
@@ -47,76 +44,69 @@ class TestBattery(unittest.TestCase):
         self.bat = Battery(e, 10, 20, soc_init=0.875, eta=0.5)
 
     def test_populate_model(self):
-        model = gp.Model('BatModel')
+        model = pyomo.ConcreteModel()
         self.bat.populate_model(model)
-        model.addConstr(self.bat.E_El_vars[2] == 10)
-        model.addConstr(self.bat.E_El_vars[0] == 5)
-        obj = gp.QuadExpr()
-        obj.addTerms(
-            [1] * 3,
-            self.bat.P_El_Demand_vars,
-            self.bat.P_El_Demand_vars
-        )
-        model.setObjective(obj)
-        model.optimize()
+        model.c1 = pyomo.Constraint(expr=self.bat.model.E_El_vars[2] == 10)
+        model.c2 = pyomo.Constraint(expr=self.bat.model.E_El_vars[0] == 5)
+        obj = pyomo.sum_product(self.bat.model.P_El_Demand_vars, self.bat.model.P_El_Demand_vars)
+        model.o = pyomo.Objective(expr=obj)
+        result = solve_model(model)
 
-        var_list = [var.varname for var in model.getVars()]
-        self.assertEqual(12, len(var_list))
-        var_sum = sum(map(lambda v: v.x, self.bat.P_El_vars[1:]))
+        # TODO stats are currently not currect due to a pyomo bug
+        # use result as a workaround
+        #model.compute_statistics()
+        #stats = model.statistics
+        #self.assertEqual(12, stats.number_of_variables)
+        self.assertEqual(14, result.Problem[0].number_of_variables)
+        var_sum = pyomo.value(pyomo.quicksum(self.bat.model.P_El_vars[t] for t in range(1, 3)))
         self.assertAlmostEqual(40, var_sum, places=5)
-        var_sum = sum(map(
-            lambda v: v.x,
-            self.bat.P_El_Supply_vars[1:] + self.bat.P_El_Demand_vars[1:]
+        var_sum = pyomo.value(pyomo.quicksum(
+            self.bat.model.P_El_Supply_vars[t] + self.bat.model.P_El_Demand_vars[t] for t in range(1, 3)
         ))
         self.assertAlmostEqual(40, var_sum, places=5)
 
     def test_update_model(self):
-        model = gp.Model('BatModel')
-        demand_var = model.addVar()
-        self.bat.P_El_Demand_vars.append(demand_var)
-        self.bat.P_El_Supply_vars.append(model.addVar())
-        self.bat.E_El_vars.append(model.addVar())
+        model = pyomo.ConcreteModel()
+        self.bat.populate_model(model)
+        demand_var = self.bat.model.P_El_vars
         self.bat.update_model(model)
-        model.addConstr(self.bat.E_El_vars[0] == 10)
-        obj = demand_var * demand_var
-        model.setObjective(obj)
-        model.optimize()
+        model.c1 = pyomo.Constraint(expr=self.bat.model.E_El_vars[0] == 10)
+        obj = pyomo.sum_product(demand_var, demand_var)
+        model.o = pyomo.Objective(expr=obj)
+        solve_model(model)
 
-        self.assertAlmostEqual(10, demand_var.x, places=5)
+        self.assertAlmostEqual(10, pyomo.value(demand_var[0]), places=5)
 
     def test_update_schedule(self):
-        m1, var_list = get_model(3)
-        m1.optimize()
-        self.bat.P_El_vars = var_list
-        m2, var_list = get_model(3, 2)
-        a = np.arange(3)
-        self.bat.P_El_Demand_vars = [m2.addVar(lb=3, ub=3) for i in range(3)]
-        self.bat.P_El_Supply_vars = [m2.addVar(lb=0, ub=0) for i in range(3)]
-        m2.optimize()
-        self.bat.E_El_vars = var_list
-
+        model = pyomo.ConcreteModel()
+        self.bat.populate_model(model)
+        self.bat.update_model(model)
+        self.bat.model.P_El_Demand_vars.setlb(3)
+        self.bat.model.P_El_Demand_vars.setub(3)
+        self.bat.model.P_El_Supply_vars.setlb(0)
+        self.bat.model.P_El_Supply_vars.setub(0)
+        obj = pyomo.sum_product(self.bat.model.P_El_Demand_vars, self.bat.model.P_El_Demand_vars)
+        model.o = pyomo.Objective(expr=obj)
+        solve_model(model)
         self.bat.update_schedule()
-        assert_equal_array(self.bat.P_El_Schedule, a)
-        assert_equal_array(self.bat.E_El_Schedule, a * 2)
+        assert_equal_array(self.bat.P_El_Schedule, [3] * 3)
+        assert_equal_array(self.bat.E_El_Schedule, 0.875 * 10 + np.arange(1, 4)*3*0.25*0.5)
+
 
     def test_calculate_co2(self):
         self.bat.P_El_Schedule = np.array([10]*3)
         self.assertEqual(0, calculate_co2(self.bat))
 
     def test_get_objective(self):
-        model = gp.Model('BatModel')
+        model = pyomo.ConcreteModel()
         self.bat.populate_model(model)
         obj = self.bat.get_objective(2)
-        self.assertEqual(3, obj.size())
-        self.assertEqual(0, obj.getLinExpr().size())
-        self.assertEqual(0, obj.getLinExpr().getConstant())
-        coeffs = np.zeros(3)
-        for i in range(3):
-            var = obj.getVar1(i)
-            self.assertIs(var, obj.getVar2(i))
-            t = [t for t in range(3) if self.bat.P_El_vars[t] is var][0]
-            coeffs[t] += obj.getCoeff(i)
-        assert_equal_array(coeffs, np.full(3, 2))
+        vs = list(pyomo.current.identify_variables(obj))
+        for t in range(3):
+            self.assertIn(self.bat.model.P_El_vars[t], vs)
+            self.bat.model.P_El_vars[t] = t * 5
+        self.assertEqual(3, len(vs))
+        self.assertEqual(sum(2*(5*t)**2 for t in range(3)), pyomo.value(obj))
 
 
 class TestBoiler(unittest.TestCase):
@@ -140,10 +130,16 @@ class TestBoiler(unittest.TestCase):
     def test_lower_activation(self):
         e = get_env(4, 8)
         bl = Boiler(e, 10, lower_activation_limit=0.5)
-        m = gp.Model('BLModel')
-        bl.populate_model(m, "integer")
-        bl.update_model(m, "integer")
-        m.optimize()
+        model = pyomo.ConcreteModel()
+        bl.populate_model(model, "integer")
+        bl.update_model(model, "integer")
+        model.o = pyomo.Objective(expr=bl.model.P_Th_vars[0])
+        results = solve_model(model)
+        self.assertEqual(TerminationCondition.optimal, results.solver.termination_condition)
+        bl.model.P_Th_vars[0].setub(-0.1)
+        bl.model.P_Th_vars[0].setlb(-4.9)
+        results = solve_model(model)
+        self.assertEqual(TerminationCondition.infeasible, results.solver.termination_condition)
 
 
 class TestBuilding(unittest.TestCase):
@@ -152,17 +148,18 @@ class TestBuilding(unittest.TestCase):
         self.bd = Building(e)
 
     def test_get_objective(self):
-        m, var_list = get_model(4)
-        self.bd.P_El_vars = var_list
-        m.optimize()
+        m = pyomo.ConcreteModel()
+        self.bd.populate_model(m)
+        self.bd.update_model(m)
+        solve_model(m)
 
         self.bd.environment.prices.tou_prices = np.array([1]*2 + [4]*6)
-        self.assertAlmostEqual(8.4, self.bd.get_objective().getValue())
+        self.assertAlmostEqual(8.4, pyomo.value(self.bd.get_objective()))
         self.bd.environment.prices.co2_prices = np.array([4]*2 + [1]*6)
         self.bd.objective = 'co2'
-        self.assertAlmostEqual(3.6, self.bd.get_objective().getValue())
+        self.assertAlmostEqual(3.6, pyomo.value(self.bd.get_objective()))
         self.bd.objective = 'peak-shaving'
-        self.assertAlmostEqual(14, self.bd.get_objective().getValue())
+        self.assertAlmostEqual(14, pyomo.value(self.bd.get_objective()))
 
     def test_calculate_co2(self):
         bes = BuildingEnergySystem(self.bd.environment)
@@ -184,7 +181,7 @@ class TestBuilding(unittest.TestCase):
         self.assertEqual(1100, co2)
 
     def test_get_objective(self):
-        model = gp.Model('BuildingModel')
+        model = pyomo.ConcreteModel()
         env = self.bd.environment
         env.prices.tou_prices[:4] = [1, 2, 3, 4]
         env.prices.co2_prices[:4] = [5, 4, 3, 2]
@@ -192,48 +189,48 @@ class TestBuilding(unittest.TestCase):
         self.bd.addEntity(bes)
         self.bd.populate_model(model)
         obj = self.bd.get_objective(2)
-        self.assertEqual(4, obj.size())
-        self.assertEqual(0, obj.getConstant())
-        coeffs = np.zeros(4)
-        for i in range(4):
-            var = obj.getVar(i)
-            t = [t for t in range(4) if self.bd.P_El_vars[t] is var][0]
-            coeffs[t] += obj.getCoeff(i)
-        assert_equal_array(coeffs, env.prices.tou_prices[:4] * 2 / sum(range(5)) * 4)
+        vs = list(pyomo.current.identify_variables(obj))
+        self.assertEqual(4, len(vs))
+        for t in range(4):
+            self.bd.model.P_El_vars[t].value = 10**t
+        self.assertAlmostEqual(2*4321/10*4, pyomo.value(obj), places=5)
+
+        model = pyomo.ConcreteModel()
         bd2 = Building(env, 'co2')
         bd2.addEntity(bes)
         bd2.populate_model(model)
         obj = bd2.get_objective(2)
-        self.assertEqual(4, obj.size())
-        self.assertEqual(0, obj.getConstant())
-        coeffs = np.zeros(4)
-        for i in range(4):
-            var = obj.getVar(i)
-            t = [t for t in range(4) if bd2.P_El_vars[t] is var][0]
-            coeffs[t] += obj.getCoeff(i)
-        assert_equal_array(coeffs, env.prices.co2_prices[:4] * 2 / sum(range(2, 6, 1)) * 4)
+        vs = list(pyomo.current.identify_variables(obj))
+        self.assertEqual(4, len(vs))
+        for t in range(4):
+            bd2.model.P_El_vars[t].value = 10**t
+        # rounding errors caused by /14 and co2_prices being np.float32
+        self.assertAlmostEqual(2*2345/14*4, pyomo.value(obj), places=3)
+
+        model = pyomo.ConcreteModel()
         bd3 = Building(env, 'peak-shaving')
         bd3.addEntity(bes)
         bd3.populate_model(model)
         obj = bd3.get_objective(2)
-        self.assertEqual(4, obj.size())
-        self.assertEqual(0, obj.getLinExpr().size())
-        self.assertEqual(0, obj.getLinExpr().getConstant())
-        coeffs = np.zeros(4)
-        for i in range(4):
-            var = obj.getVar1(i)
-            self.assertIs(var, obj.getVar2(i))
-            t = [t for t in range(4) if bd3.P_El_vars[t] is var][0]
-            coeffs[t] += obj.getCoeff(i)
-        assert_equal_array(coeffs, np.full(4, 2))
-        bd4 = Building(env, None)
-        obj = bd4.get_objective(2)
-        self.assertEqual(0, obj.size())
-        self.assertEqual(0, obj.getConstant())
-        bd4.addEntity(bes)
-        bd4 = Building(env, "invalid")
-        self.assertRaisesRegex(ValueError, ".*Building.*", bd4.get_objective)
+        vs = list(pyomo.current.identify_variables(obj))
+        self.assertEqual(4, len(vs))
+        for t in range(4):
+            bd3.model.P_El_vars[t].value = 10**t
+        self.assertEqual(2*1010101, pyomo.value(obj))
 
+        model = pyomo.ConcreteModel()
+        bd4 = Building(env, None)
+        bd4.addEntity(bes)
+        bd4.populate_model(model)
+        obj = bd4.get_objective(2)
+        vs = list(pyomo.current.identify_variables(obj))
+        self.assertEqual(0, len(vs))
+        for t in range(4):
+            bd4.model.P_El_vars[t].value = 10 ** t
+        self.assertEqual(0, pyomo.value(obj))
+
+        bd5 = Building(env, "invalid")
+        self.assertRaisesRegex(ValueError, ".*Building.*", bd5.get_objective)
 
 
 class TestCurtailableLoad(unittest.TestCase):
@@ -376,8 +373,12 @@ class TestCurtailableLoad(unittest.TestCase):
                     cl.model.P_State_vars[1].setub(0)
                     cl.model.P_State_vars[1].setlb(0)
 
-                    model.o = pyomo.Objective(expr=0)
+                    model.o = pyomo.Objective(expr=cl.model.P_State_vars[0])
+                    logger = logging.getLogger("pyomo.core")
+                    oldlevel = logger.level
+                    logger.setLevel(logging.ERROR)
                     results = solve_model(model)
+                    logger.setLevel(oldlevel)
                     if full > 1:
                         self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
                     else:
@@ -392,17 +393,14 @@ class TestCurtailableLoad(unittest.TestCase):
                         model = pyomo.ConcreteModel()
                         cl = CurtailableLoad(e, 2, 0.5)
                         cl.populate_model(model)
+                        obj = pyomo.sum_product(cl.model.P_El_vars)
+                        model.o = pyomo.Objective(expr=obj)
                         for t in range(0, 21 - horizon, width):
                             e.timer.currentTimestep = t
                             cl.update_model(model)
-                            obj = pyomo.sum_product(cl.model.P_El_vars)
-                            model.o = pyomo.Objective(expr=obj)
                             solve_model(model)
-
                             self.assertEqual(1, pyomo.value(cl.model.P_El_vars[0]))
-
                             cl.update_schedule()
-
                         assert_equal_array(cl.P_El_Schedule, [1] * 20)
 
     def test_small_horizon_low_full(self):
@@ -430,7 +428,6 @@ class TestCurtailableLoad(unittest.TestCase):
                                                         1 * low + 2 * full,
                                                         np.array2string(cl.P_El_Schedule))
 
-
     def test_small_horizon_low_full_integer(self):
         for horizon in [1, 2, 4]:
             e = get_env(horizon, 20)
@@ -452,7 +449,7 @@ class TestCurtailableLoad(unittest.TestCase):
                                 best_obj = pyomo.value(obj)
                                 model.o_constr = pyomo.Constraint(expr=best_obj == obj)
                                 model.del_component("o")
-                                model.o = pyomo.Objective(expr=pyomo.sum_product(range(0, -cl.op_horizon, -1),
+                                model.o = pyomo.Objective(expr=pyomo.sum_product(range(-1, -cl.op_horizon-1, -1),
                                                                                  cl.model.P_El_vars))
                                 results = solve_model(model)
                                 model.del_component("o")
@@ -469,30 +466,34 @@ class TestCityDistrict(unittest.TestCase):
         self.cd = CityDistrict(e)
 
     def test_get_objective(self):
-        m, var_list = get_model(4)
-        self.cd.P_El_vars = var_list
-        m.optimize()
+        m = pyomo.ConcreteModel()
+        self.cd.populate_model(m)
+        m.o = pyomo.Objective(expr=self.cd.get_objective())
+        solve_model(m)
+
+        for t in range(4):
+            self.cd.model.P_El_vars[t].value = t
 
         self.assertEqual(self.cd.objective, "price")
         self.cd.environment.prices.da_prices = np.array([1]*2 + [4]*6)
-        self.assertAlmostEqual(8.4, self.cd.get_objective().getValue())
+        self.assertAlmostEqual(8.4, pyomo.value(self.cd.get_objective()))
         self.cd.objective = 'peak-shaving'
-        self.assertAlmostEqual(14, self.cd.get_objective().getValue())
+        self.assertAlmostEqual(14, pyomo.value(self.cd.get_objective()))
         self.cd.objective = 'valley-filling'
         self.cd.valley_profile = np.array([-1]*8)
-        self.assertAlmostEqual(2, self.cd.get_objective().getValue())
+        self.assertAlmostEqual(2, pyomo.value(self.cd.get_objective()))
         self.cd.objective = None
-        self.assertAlmostEqual(0, self.cd.get_objective().getValue())
+        self.assertAlmostEqual(0, pyomo.value(self.cd.get_objective()))
         self.cd.objective = "invalid"
         self.assertRaisesRegex(ValueError, ".*CityDistrict.*", self.cd.get_objective)
 
+        m = pyomo.ConcreteModel()
         self.cd.objective = "max-consumption"
         self.cd.populate_model(m)
-        for t in range(4):
-            self.cd.P_El_vars[t].start = t
-        self.cd.P_El_vars[0].ub = -1
-        m.optimize()
-        self.assertAlmostEqual(1, self.cd.get_objective().getValue())
+        self.cd.model.P_El_vars[0].setub(-1)
+        m.o = pyomo.Objective(expr=self.cd.get_objective())
+        solve_model(m)
+        self.assertAlmostEqual(1, pyomo.value(self.cd.get_objective()))
 
 
     def test_calculate_costs(self):
@@ -585,10 +586,15 @@ class TestCombinedHeatPower(unittest.TestCase):
     def test_lower_activation(self):
         e = get_env(4, 8)
         chp = CombinedHeatPower(e, 10, 10, 0.8, 0.5)
-        m = gp.Model('CHPModel')
+        m = pyomo.ConcreteModel()
         chp.populate_model(m, "integer")
         chp.update_model(m, "integer")
-        m.optimize()
+        obj = pyomo.sum_product(chp.model.P_El_vars, chp.model.P_El_vars)
+        obj += 2*3 * pyomo.sum_product(chp.model.P_El_vars)
+        m.o = pyomo.Objective(expr=obj)
+        solve_model(m)
+        chp.update_schedule()
+        assert_equal_array(chp.P_El_Schedule[:4], [-5]*4)
 
 
 class TestDeferrableLoad(unittest.TestCase):
@@ -635,7 +641,11 @@ class TestDeferrableLoad(unittest.TestCase):
         infeasible.update_model(m)
         obj = pyomo.sum_product(infeasible.model.P_El_vars)
         m.o = pyomo.Objective(expr=obj)
+        logger = logging.getLogger("pyomo.core")
+        oldlevel = logger.level
+        logger.setLevel(logging.ERROR)
         results = solve_model(m)
+        logger.setLevel(oldlevel)
         self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
     def test_update_model_integer(self):
@@ -668,7 +678,11 @@ class TestDeferrableLoad(unittest.TestCase):
         dl.update_model(model, mode="integer")
         obj = pyomo.sum_product(dl.model.P_El_vars)
         model.o = pyomo.Objective(expr=obj)
+        logger = logging.getLogger("pyomo.core")
+        oldlevel = logger.level
+        logger.setLevel(logging.ERROR)
         results = solve_model(model)
+        logger.setLevel(oldlevel)
         self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
         dl = DeferrableLoad(self.e, 19, 19, load_time=self.lt)
@@ -677,7 +691,11 @@ class TestDeferrableLoad(unittest.TestCase):
         dl.update_model(model, mode="integer")
         obj = pyomo.sum_product(dl.model.P_El_vars)
         model.o = pyomo.Objective(expr=obj)
+        logger = logging.getLogger("pyomo.core")
+        oldlevel = logger.level
+        logger.setLevel(logging.ERROR)
         results = solve_model(model)
+        logger.setLevel(oldlevel)
         self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
         dl = DeferrableLoad(self.e, 19, 19*3/4, load_time=self.lt)
@@ -696,7 +714,14 @@ class TestFixedLoad(unittest.TestCase):
     def setUp(self):
         e = get_env(2, 4)
         load = np.arange(1, 5)
+        model = pyomo.ConcreteModel()
         self.fl = FixedLoad(e, method=0, demand=load)
+        self.fl.populate_model(model)
+        self.fl.populate_model(model)
+        model.o = pyomo.Objective(expr=pyomo.sum_product(self.fl.model.P_El_vars))
+        solve_model(model)
+        for t in range(2):
+            self.assertEqual(self.fl.model.P_El_vars[t].value, load[t])
 
 
 class TestElectricalEntity(unittest.TestCase):
@@ -706,9 +731,10 @@ class TestElectricalEntity(unittest.TestCase):
         self.ee.environment = e
 
     def test_update_schedule(self):
-        m, var_list = get_model(4)
-        m.optimize()
-        self.ee.P_El_vars = var_list
+        m = pyomo.ConcreteModel()
+        self.ee.populate_model(m)
+        for t in range(4):
+            self.ee.model.P_El_vars[t].value = t
         a = np.arange(4)
 
         self.ee.update_schedule()
@@ -828,10 +854,15 @@ class TestElectricalHeater(unittest.TestCase):
     def test_lower_activation(self):
         e = get_env(4, 8)
         eh = ElectricalHeater(e, 10, lower_activation_limit=0.5)
-        m = gp.Model('EHPModel')
+        m = pyomo.ConcreteModel()
         eh.populate_model(m, "integer")
         eh.update_model(m, "integer")
-        m.optimize()
+        obj = pyomo.sum_product(eh.model.P_El_vars, eh.model.P_El_vars)
+        obj += -2 * 3 * pyomo.sum_product(eh.model.P_El_vars)
+        m.o = pyomo.Objective(expr=obj)
+        solve_model(m)
+        eh.update_schedule()
+        assert_equal_array(eh.P_El_Schedule[:4], [5] * 4)
 
 
 class TestElectricVehicle(unittest.TestCase):
@@ -841,74 +872,69 @@ class TestElectricVehicle(unittest.TestCase):
         self.ev = ElectricalVehicle(e, 10, 20, 0.5, charging_time=self.ct)
 
     def test_populate_model(self):
-        model = gp.Model('EVModel')
+        model = pyomo.ConcreteModel()
         self.ev.populate_model(model)
-        model.addConstr(self.ev.E_El_vars[2] == 10)
-        model.addConstr(self.ev.E_El_vars[0] == 5)
-        obj = gp.QuadExpr()
-        obj.addTerms(
-            [1] * 6,
-            self.ev.P_El_Demand_vars,
-            self.ev.P_El_Demand_vars
-        )
-        model.setObjective(obj)
-        model.optimize()
+        model.c1 = pyomo.Constraint(expr=self.ev.model.E_El_vars[2] == 10)
+        model.c2 = pyomo.Constraint(expr=self.ev.model.E_El_vars[0] == 5)
+        obj = pyomo.sum_product(self.ev.model.P_El_Demand_vars, self.ev.model.P_El_Demand_vars)
+        model.o = pyomo.Objective(expr=obj)
+        result = solve_model(model)
 
-        var_list = [var.varname for var in model.getVars()]
-        self.assertEqual(30, len(var_list))
-        var_sum = sum(map(lambda v: v.x, self.ev.P_El_vars[1:]))
+        # TODO stats are currently not correct due to a pyomo bug
+        # use result as a workaround
+        # model.compute_statistics()
+        # stats = model.statistics
+        # self.assertEqual(30, stats.number_of_variables)
+        self.assertEqual(32, result.Problem[0].number_of_variables)
+        var_sum = pyomo.value(pyomo.quicksum(self.ev.model.P_El_vars[t] for t in range(1, 6)))
         self.assertAlmostEqual(20, var_sum, places=5)
-        var_sum = sum(map(
-            lambda v: v.x,
-            self.ev.P_El_Supply_vars[1:] + self.ev.P_El_Demand_vars[1:]
-        ))
+        var_sum = pyomo.value(pyomo.quicksum(
+            self.ev.model.P_El_Supply_vars[t] + self.ev.model.P_El_Demand_vars[t] for t in range(1, 6)))
         self.assertAlmostEqual(20, var_sum, places=5)
 
     def test_update_model(self):
-        model = gp.Model('EVModel')
+        model = pyomo.ConcreteModel()
         self.ev.populate_model(model)
         self.ev.update_model(model)
-        model.optimize()
+        model.o = pyomo.Objective(expr=self.ev.get_objective())
+        solve_model(model)
 
-        self.assertAlmostEqual(10, self.ev.E_El_vars[2].x, places=5)
-        self.assertAlmostEqual(2, self.ev.E_El_vars[3].x, places=5)
+        self.assertAlmostEqual(10, self.ev.model.E_El_vars[2].value, places=5)
+        self.assertAlmostEqual(2, self.ev.model.E_El_vars[3].value, places=5)
 
         self.ev.timer.mpc_update()
         self.ev.update_model(model)
-        model.optimize()
+        solve_model(model)
 
         for t, c in enumerate(self.ct[1:7]):
             if c:
-                self.assertEqual(20, self.ev.P_El_Demand_vars[t].ub)
-                self.assertEqual(20, self.ev.P_El_Supply_vars[t].ub)
-                self.assertEqual(0, self.ev.P_El_Drive_vars[t].ub)
+                self.assertEqual(20, self.ev.model.P_El_Demand_vars[t].ub)
+                self.assertEqual(20, self.ev.model.P_El_Supply_vars[t].ub)
+                self.assertEqual(0, self.ev.model.P_El_Drive_vars[t].ub)
             else:
-                self.assertEqual(0, self.ev.P_El_Demand_vars[t].ub)
-                self.assertEqual(0, self.ev.P_El_Supply_vars[t].ub)
-                self.assertTrue(np.isinf(self.ev.P_El_Drive_vars[t].ub))
-        self.assertAlmostEqual(10, self.ev.E_El_vars[1].x, places=5)
-        self.assertAlmostEqual(2, self.ev.E_El_vars[2].x, places=5)
-        self.assertLessEqual(1.6, self.ev.E_El_vars[-1].x)
+                self.assertEqual(0, self.ev.model.P_El_Demand_vars[t].ub)
+                self.assertEqual(0, self.ev.model.P_El_Supply_vars[t].ub)
+                self.assertIsNone(self.ev.model.P_El_Drive_vars[t].ub)
+        self.assertAlmostEqual(10, self.ev.model.E_El_vars[1].value, places=5)
+        self.assertAlmostEqual(2, self.ev.model.E_El_vars[2].value, places=5)
+        self.assertLessEqual(1.6, self.ev.model.E_El_vars[5].value)
 
         self.ev.timer.mpc_update()
         self.ev.timer.mpc_update()
         self.ev.update_model(model)
-        model.optimize()
+        solve_model(model)
 
-        self.assertAlmostEqual(5, self.ev.E_El_vars[-1].x, places=5)
+        self.assertAlmostEqual(5, self.ev.model.E_El_vars[5].value, places=5)
 
     def test_get_objective(self):
-        model = gp.Model('EVModel')
-        self.ev.P_El_vars.append(model.addVar())
-        self.ev.P_El_vars.append(model.addVar())
-        self.ev.P_El_vars.append(model.addVar())
-        self.ev.P_El_vars.append(model.addVar())
-        self.ev.P_El_vars.append(model.addVar())
-        self.ev.P_El_vars.append(model.addVar())
+        model = pyomo.ConcreteModel()
+        self.ev.populate_model(model)
+        self.ev.update_model(model)
+
         obj = self.ev.get_objective(11)
         for i in range(6):
             ref = (i + 1) / 21 * 6 * 11
-            coeff = obj.getCoeff(i)
+            coeff = obj.args[i].args[0].args[0]
             self.assertAlmostEqual(ref, coeff, places=5)
 
 
@@ -917,32 +943,34 @@ class TestHeatPump(unittest.TestCase):
         e = get_env(4, 8)
         self.hp = HeatPump(e, 10, cop=np.full(8, 11))
 
-    def test_populate_model(self):
-        m = gp.Model()
-        self.hp.populate_model(m)
-        m.update()
-
-        c = self.hp.coupl_constrs[0]
-        self.assertEqual(1, m.getCoeff(c, self.hp.P_El_vars[0]))
-        self.assertEqual(1, m.getCoeff(c, self.hp.P_Th_vars[0]))
-
     def test_update_model(self):
-        m = gp.Model()
+        m = pyomo.ConcreteModel()
         self.hp.populate_model(m)
         self.hp.update_model(m)
-        m.update()
 
-        c = self.hp.coupl_constrs[0]
-        self.assertEqual(11, m.getCoeff(c, self.hp.P_El_vars[0]))
-        self.assertEqual(1, m.getCoeff(c, self.hp.P_Th_vars[0]))
+        c = self.hp.model.p_coupl_constr[0]
+        f, l = pyomo.current.decompose_term(c.body)
+        self.assertTrue(f)
+        for coeff, value in l:
+            if value is self.hp.model.P_El_vars[0]:
+                self.assertEqual(11, coeff)
+            if value is self.hp.model.P_Th_vars[0]:
+                self.assertEqual(1, coeff)
+            if value is None:
+                self.assertEqual(0, coeff)
 
     def test_lower_activation(self):
         e = get_env(4, 8)
         hp = HeatPump(e, 10, lower_activation_limit=0.5)
-        m = gp.Model('HPModel')
+        m = pyomo.ConcreteModel()
         hp.populate_model(m, "integer")
         hp.update_model(m, "integer")
-        m.optimize()
+        obj = pyomo.sum_product(hp.model.P_Th_vars, hp.model.P_Th_vars)
+        obj += 2 * 3 * pyomo.sum_product(hp.model.P_Th_vars)
+        m.o = pyomo.Objective(expr=obj)
+        solve_model(m)
+        hp.update_schedule()
+        assert_equal_array(hp.P_Th_Schedule[:4], [-5] * 4)
 
 
 class TestPhotovoltaic(unittest.TestCase):
@@ -992,17 +1020,19 @@ class TestThermalEnergyStorage(unittest.TestCase):
         self.tes = ThermalEnergyStorage(e, 40, 0.5)
 
     def test_update_schedule(self):
-        m1, var_list = get_model(3)
-        m1.optimize()
-        self.tes.P_Th_vars = var_list
-        m2, var_list = get_model(3, 2)
-        m2.optimize()
-        self.tes.E_Th_vars = var_list
+        m = pyomo.ConcreteModel()
+        self.tes.populate_model(m)
+        self.tes.update_model(m)
+        for t in range(3):
+            self.tes.model.P_Th_vars[t].setub(t)
+            self.tes.model.P_Th_vars[t].setlb(t)
+        m.o = pyomo.Objective(expr=pyomo.sum_product(self.tes.model.P_Th_vars))
+        solve_model(m)
         a = np.arange(3)
 
         self.tes.update_schedule()
         assert_equal_array(self.tes.P_Th_Schedule, a)
-        assert_equal_array(self.tes.E_Th_Schedule, a * 2)
+        assert_equal_array(self.tes.E_Th_Schedule, [20, 20.25, 20.75])
 
 
 class TestThermalEntity(unittest.TestCase):
@@ -1012,9 +1042,14 @@ class TestThermalEntity(unittest.TestCase):
         self.th.environment = e
 
     def test_update_schedule(self):
-        m, var_list = get_model(4)
-        m.optimize()
-        self.th.P_Th_vars = var_list
+        m = pyomo.ConcreteModel()
+        self.th.populate_model(m)
+        self.th.update_model(m)
+        for t in range(4):
+            self.th.model.P_Th_vars[t].setub(t)
+            self.th.model.P_Th_vars[t].setlb(t)
+        m.o = pyomo.Objective(expr=pyomo.sum_product(self.th.model.P_Th_vars))
+        solve_model(m)
         a = np.arange(4)
 
         self.th.update_schedule()
@@ -1078,21 +1113,17 @@ def get_env(op_horizon, mpc_horizon=None, mpc_step_width=1):
     return Environment(ti, we, pr)
 
 
-def get_model(var_length, factor=1):
-    m = gp.Model()
-    var_list = []
-    for i in range(var_length):
-        b = i*factor
-        var_list.append(m.addVar(lb=b, ub=b))
-    return m, var_list
-
-
 def assert_equal_array(a: np.ndarray, expected):
     if not np.allclose(a, expected):
         expected = np.array(expected)
         msg = "Array {} does not equal expected array {}".format(np.array2string(a), np.array2string(expected))
         raise AssertionError(msg)
 
+
 def solve_model(model):
+    # hack to suppress pyomo no constraint warning
+    if not hasattr(model, "simple_var"):
+        model.simple_var = pyomo.Var(domain=pyomo.Reals, bounds=(None, None), initialize=0)
+        model.simple_constr = pyomo.Constraint(expr=model.simple_var == 1)
     opt = pyomo.SolverFactory('gurobi')
     return opt.solve(model)
