@@ -74,18 +74,9 @@ class ElectricalVehicle(Battery):
         m = self.model
 
         # Simulate power consumption while driving
-        for t in self.op_time_vec:
-            self.P_El_Drive_vars.append(
-                model.addVar(
-                    name="%s_P_El_Drive_at_t=%i" % (self._long_ID, t + 1)
-                )
-            )
         m.P_El_Drive_vars = pyomo.Var(m.t, domain=pyomo.NonNegativeReals, bounds=(0, None), initialize=0)
-        model.update()
 
         # Replace coupling constraints from Battery class
-        model.remove(self.E_El_coupl_constrs)
-        del self.E_El_coupl_constrs[:]
         m.del_component("E_constr")
         m.del_component("E_end_constr")
         def e_rule(model, t):
@@ -109,6 +100,12 @@ class ElectricalVehicle(Battery):
             m.E_El_Ini = self.E_El_Schedule[timestep-1]
 
         charging_time = self.charging_time[self.op_slice]
+
+        # Reset E_El bounds
+        for t in self.op_time_vec:
+            m.E_El_vars[t].setub(self.E_El_Max)
+            m.E_El_vars[t].setlb(0)
+
         for t in self.op_time_vec:
             if charging_time[t]:
                 m.P_El_Demand_vars[t].setub(self.P_El_Max_Charge)
@@ -125,7 +122,7 @@ class ElectricalVehicle(Battery):
                     m.E_El_vars[t].setlb(self.E_El_Max)
 
                     # Empty battery
-                    m.E_El_vars[t+1].setub(0.2 * self.E_El_Max)
+                    m.E_El_vars[t + 1].setub(0.2 * self.E_El_Max)
                     m.E_El_vars[t + 1].setlb(0.2 * self.E_El_Max)
 
         if charging_time[-1]:
@@ -141,8 +138,8 @@ class ElectricalVehicle(Battery):
                     break
                 last_ts += 1
             portion = (current_ts - first_ts) / (last_ts - first_ts)
-            m.E_El_vars[t + 1].setub(portion * self.E_El_Max)
-            m.E_El_vars[t + 1].setlb(portion * self.E_El_Max)
+            m.E_El_vars[self.op_horizon-1].setub(portion * self.E_El_Max)
+            m.E_El_vars[self.op_horizon-1].setlb(portion * self.E_El_Max)
 
     def get_objective(self, coeff=1):
         """Objective function for entity level scheduling.

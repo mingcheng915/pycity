@@ -48,8 +48,8 @@ class Battery(ElectricalEntity, bat.Battery):
 
         self.new_var("P_El_Demand")
         self.new_var("P_El_Supply")
-        self.new_var("P_State", dtype=np.bool, func=lambda t: pyomo.value(
-            self.model.P_El_Demand_vars[t] > self.model.P_El_Supply_vars[t]))
+        self.new_var("P_State", dtype=np.bool, func=lambda model, t: pyomo.value(
+            model.P_El_Demand_vars[t] > model.P_El_Supply_vars[t]))
         self.new_var("E_El")
         self.E_El_Init_constr = None
         self.E_El_coupl_constrs = []

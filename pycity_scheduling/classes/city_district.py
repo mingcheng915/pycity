@@ -60,7 +60,8 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
         if self.objective == 'valley-filling':
             e = coeff * pyomo.sum_product(self.model.P_El_vars, self.model.P_El_vars)
             valley = self.valley_profile[self.op_slice]
-            return 2 * coeff * pyomo.sum_product(valley, self.model.P_El_vars, start=e)
+            e += 2 * coeff * pyomo.sum_product(valley, self.model.P_El_vars)
+            return e
         elif self.objective == 'price':
             prices = self.environment.prices.da_prices[self.op_slice]
             s = sum(abs(prices))

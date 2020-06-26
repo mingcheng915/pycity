@@ -58,9 +58,9 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                 .format(self._long_ID)
             )
 
-        self.new_var("P_Start", dtype=np.bool, func=lambda t:
+        self.new_var("P_Start", dtype=np.bool, func=lambda model, t:
                      t == np.argmax(np.array(
-                         [sum(pyomo.value(self.model.P_El_vars[i])
+                         [sum(pyomo.value(model.P_El_vars[i])
                           for i in range(start, start+self.runtime))
                           for start in range(0, self.op_horizon - self.runtime)
                           ])

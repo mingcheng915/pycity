@@ -58,7 +58,6 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
         self.COP = cop
         self.P_Th_Nom = P_Th_nom
 
-        self.new_var("P_State", dtype=np.bool, func=lambda t: self.P_Th_vars[t].x > 0.01*P_Th_nom)
         self.coupl_constrs = []
         self.Act_coupl_constr = None
         self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
@@ -88,7 +87,7 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
             m.COP = pyomo.Param(m.t, mutable=True)
 
             def p_coupl_rule(model, t):
-                return model.P_Th_vars[t] + model.COP * model.P_El_vars[t] == 0
+                return model.P_Th_vars[t] + model.COP[t] * model.P_El_vars[t] == 0
             m.p_coupl_constr = pyomo.Constraint(m.t, rule=p_coupl_rule)
 
             self.Activation_constr.apply(m, mode)
@@ -99,4 +98,6 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
 
     def update_model(self, model, mode=""):
         m = self.model
-        m.COP = self.COP[self.op_slice]
+        cop = self.COP[self.op_slice]
+        for t in self.op_time_vec:
+            m.COP[t] = cop[t]

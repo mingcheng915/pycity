@@ -4,6 +4,7 @@ import pycity_base.classes.supply.CHP as chp
 
 from .thermal_entity import ThermalEntity
 from .electrical_entity import ElectricalEntity
+from ..util.generic_constraints import LowerActivationLimit
 
 
 class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
@@ -42,9 +43,9 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         super().__init__(environment, p_nominal, q_nominal, eta, 55, lower_activation_limit)
         self._long_ID = "CHP_" + self._ID_string
         self.P_Th_Nom = P_Th_nom
-        self.new_var("P_State", dtype=np.bool, func=lambda t: self.P_Th_vars[t].x > 0.01*P_Th_nom)
+        self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
 
-    def populate_model(self, mode="convex"):
+    def populate_model(self, model, mode="convex"):
         """Add variables and constraints to Gurobi model.
 
         Call both parents' `populate_model` methods and set the upper bounds
@@ -60,7 +61,7 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
             - `convex`  : Use linear constraints
             - `integer`  : Use integer variables representing discrete control decisions
         """
-        super().populate_model(mode)
+        super().populate_model(model, mode)
         m = self.model
 
         if mode in ["convex", "integer"]:
@@ -86,24 +87,9 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
 
             def p_coupl_rule(model, t):
                 return model.P_Th_vars[t] * self.sigma == model.P_El_vars[t]
-
             m.P_coupl_constr = pyomo.Constraint(m.t, rule=p_coupl_rule)
-            if mode == "integer" and self.lowerActivationLimit != 0.0:
-                # Add additional binary variables representing operating state
-                m.P_State_vars = pyomo.Var(m.t, domain=pyomo.Binary)
 
-                # Couple state to operating variable
-                def p_state_rule(model, t):
-                    return model.P_Th_vars[t] >= -model.P_State_vars[t] * self.P_Th_Nom
-                m.P_state_constr = pyomo.Constraint(m.t, rule=p_state_rule)
-
-                def p_activation_rule(model, t):
-                    return model.P_Th_vars[t] <= -model.P_State_vars[t] * self.P_Th_Nom * self.lowerActivationLimit
-                m.P_activation_rule = pyomo.Constraint(m.t, rule=p_activation_rule)
-
-                # Remove redundant limits of P_Th_vars
-                m.P_Th_vars.setlb(None)
-                m.P_Th_vars.setub(None)
+            self.Activation_constr.apply(m, mode)
         else:
             raise ValueError(
                 "Mode %s is not implemented by CHP." % str(mode)
