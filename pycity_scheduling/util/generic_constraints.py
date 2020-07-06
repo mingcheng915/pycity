@@ -57,7 +57,8 @@ class LowerActivationLimit(Constraint):
         self.var_nom = var_nom
         self.var_name = var_name
         self.lowerActivationLimit = lower_activation_limit
-        o.new_var(var_name+"_State", dtype=np.bool, func=lambda model, t: abs(model.P_Th_vars[t].value) > abs(0.01 * var_nom))
+        o.new_var(var_name+"_State", dtype=np.bool, func=lambda model, t: abs(getattr(model, self.var_name + "_vars")
+                                                                              [t].value) > abs(0.01 * var_nom))
 
     def apply(self, m, mode):
         if mode == "integer" and self.lowerActivationLimit != 0.0 and self.var_nom != 0.0:

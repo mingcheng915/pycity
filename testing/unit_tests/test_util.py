@@ -5,9 +5,49 @@ import pyomo.environ as pyomo
 from pyomo.opt import SolverStatus, TerminationCondition
 
 import pycity_scheduling.util as util
+import pycity_scheduling.util.generic_constraints as gen_constrs
 from pycity_scheduling.classes import *
 import pycity_scheduling.util.factory
 from pycity_scheduling.data.tabula_data import tabula_building_data
+
+def _get_constr_count(block):
+    return sum(len(data) for data in block.component_map(pyomo.Constraint).itervalues())
+
+class TestConstraints(unittest.TestCase):
+    def setUp(self):
+        t = Timer()
+        p = Prices(t)
+        w = Weather(t)
+        self.env = Environment(t, w, p)
+
+    def test_lower_activation_limit(self):
+        ee = ElectricalEntity(self.env)
+        m = pyomo.ConcreteModel()
+        ee.populate_model(m, "integer")
+        o = pyomo.sum_product(ee.model.P_El_vars, ee.model.P_El_vars)
+        o -= 2 * 0.3 * pyomo.sum_product(ee.model.P_El_vars)
+        m.o = pyomo.Objective(expr=o)
+        self.assertEqual(_get_constr_count(ee.model), 0)
+        lal_constr = gen_constrs.LowerActivationLimit(ee, "P_El", 0.5, 1)
+
+        lal_constr.apply(ee.model, "convex")
+        self.assertEqual(_get_constr_count(ee.model), 0)
+        opt = pyomo.SolverFactory('gurobi')
+        opt.solve(m)
+        ee.update_schedule()
+        for i in ee.op_time_vec:
+            self.assertEqual(ee.P_El_Schedule[i], 0.3)
+            self.assertEqual(ee.P_El_State_Schedule[i], 1.0)
+
+        lal_constr.apply(ee.model, "integer")
+        self.assertEqual(_get_constr_count(ee.model), 96*2)
+
+        opt.solve(m)
+        ee.update_schedule()
+        for i in ee.op_time_vec:
+            self.assertEqual(ee.P_El_Schedule[i], 0.5)
+            self.assertEqual(ee.P_El_State_Schedule[i], 1.0)
+
 
 class TestFactory(unittest.TestCase):
     def setUp(self):
