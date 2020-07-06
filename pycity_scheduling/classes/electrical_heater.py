@@ -39,7 +39,7 @@ class ElectricalHeater(ThermalEntity, ElectricalEntity, eh.ElectricalHeater):
         self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
 
     def populate_model(self, model, mode="convex"):
-        """Add variables to Gurobi model.
+        """Add device block to pyomo ConcreteModel.
 
         Call parent's `populate_model` method and set thermal variables upper
         bounds to `self.P_Th_Nom`. Also add constraint to bind electrical
@@ -47,7 +47,7 @@ class ElectricalHeater(ThermalEntity, ElectricalEntity, eh.ElectricalHeater):
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

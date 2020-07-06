@@ -8,16 +8,16 @@ from .electrical_entity import ElectricalEntity
 class EntityContainer(ThermalEntity, ElectricalEntity):
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model.
+        """Add entity block and lower entities blocks to pyomo ConcreteModel.
 
         Call both parent's `populate_model` methods and set variables lower
-        bounds to `-gurobi.GRB.INFINITY`. Then call `populate_model` method
-        of all contained entities and add constraints that the sum of their
-        variables for each period equals the corresponding own variable.
+        bounds to `None`. Then call `populate_model` method of all contained
+        entities and add constraints that the sum of their variables for each
+        period equals the corresponding own variable.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

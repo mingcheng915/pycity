@@ -1,5 +1,6 @@
 import numpy as np
 import pyomo.environ as pyomo
+from pyomo.core.expr.numeric_expr import ExpressionBase
 
 import pycity_base.classes.supply.PV as pv
 
@@ -80,7 +81,7 @@ class Photovoltaic(ElectricalEntity, pv.PV):
 
         Returns
         -------
-        gurobi.QuadExpr :
+        ExpressionBase :
             Objective function.
         """
         m = self.model

@@ -63,7 +63,7 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
         self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
 
     def populate_model(self, model, mode="convex"):
-        """Add variables to Gurobi model.
+        """Add device block to pyomo ConcreteModel.
 
         Call parent's `populate_model` method and set thermal variables lower
         bounds to `-self.P_Th_Nom` and the upper bounds to zero. Also add
@@ -71,11 +71,12 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints
-            - `integer`  : Use integer variables representing discrete control decisions
+            - `integer`  : Use integer variables representing discrete control
+                           decisions
         """
         super().populate_model(model, mode)
         m = self.model

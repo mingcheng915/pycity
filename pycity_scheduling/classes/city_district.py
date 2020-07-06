@@ -33,14 +33,14 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
         self.valley_profile = valley_profile
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model.
+        """Add city district block to pyomo ConcreteModel.
 
         Call parent's `populate_model` methods and set variables lower
-        bounds to `-gurobi.GRB.INFINITY`.
+        bounds to `None`.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

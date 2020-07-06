@@ -1,5 +1,6 @@
 import numpy as np
 import pyomo.environ as pyomo
+from pyomo.core.expr.numeric_expr import ExpressionBase
 import pycity_base.classes.demand.ElectricalDemand as ed
 
 from warnings import warn
@@ -69,7 +70,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.runtime = int(round(self.E_Consumption / (self.P_El_Nom * self.time_slot)))
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model
+        """Add device block to pyomo ConcreteModel
 
         Call parent's `populate_model` method and set the upper bounds to the
         nominal power or zero depending on `self.time`. Also set a constraint
@@ -78,7 +79,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints
@@ -187,7 +188,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
 
         Returns
         -------
-        gurobi.QuadExpr :
+        ExpressionBase :
             Objective function.
         """
         m = self.model

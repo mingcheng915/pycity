@@ -15,12 +15,6 @@ class BuildingEnergySystem(EntityContainer, bes.BES):
         self._long_ID = "BES_" + self._ID_string
 
     def get_lower_entities(self):
-        """
-
-        Yields
-        ------
-        All contained entities.
-        """
         if self.hasBoiler:
             yield self.boiler
         if self.hasChp:

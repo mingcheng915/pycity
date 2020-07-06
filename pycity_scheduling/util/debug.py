@@ -1,17 +1,23 @@
 import pyomo.environ as pyomo
 from pyomo.opt import SolverStatus, TerminationCondition
+from pyomo.solvers.plugins.solvers.direct_or_persistent_solver import DirectOrPersistentSolver
+from pyomo.opt.results.results_ import SolverResults
 import pyomo.solvers.plugins.solvers as Solvers
 
 
 def analyze_model(model, optimizer, result, options={}):
-    """Analyze a Gurobi model which is not optimal.
+    """Analyze a model which is not optimal.
 
     Parameters
     ----------
     model : pyomo.ConcreteModel
         Model with `status != GRB.OPTIAML`
-    exception : Exception, optional
-        Original exception, whose message will be printed
+    optimizer : DirectOrPersistentSolver
+        The solver that was used for optimization and is used for analyzes
+    result: SolverResults
+        The not optimal result that was returned by the solver
+    options : str, optional
+        Options which should be passed to the solver when analyzing
     """
     if result.solver.termination_condition in \
             [TerminationCondition.infeasibleOrUnbounded, TerminationCondition.infeasible] and \

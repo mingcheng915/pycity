@@ -1,5 +1,6 @@
 import numpy as np
 import pyomo.environ as pyomo
+from pyomo.core.expr.numeric_expr import ExpressionBase
 
 import pycity_base.classes.supply.WindEnergyConverter as wec
 
@@ -72,7 +73,7 @@ class WindEnergyConverter(ElectricalEntity, wec.WindEnergyConverter):
 
         Returns
         -------
-        gurobi.QuadExpr :
+        ExpressionBase :
             Objective function.
         """
         m = self.model

@@ -1,5 +1,6 @@
 import numpy as np
 import pyomo.environ as pyomo
+from pyomo.core.expr.numeric_expr import ExpressionBase
 import pycity_base.classes.supply.Boiler as bl
 
 from .thermal_entity import ThermalEntity
@@ -38,18 +39,19 @@ class Boiler(ThermalEntity, bl.Boiler):
         self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
 
     def populate_model(self, model, mode="convex"):
-        """Add variables to Gurobi model
+        """Add device block to pyomo ConcreteModel
 
         Call parent's `populate_model` method and set variables upper bounds
         to `self.P_Th_Nom`.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints
-            - `integer`  : Use integer variables representing discrete control decisions
+            - `integer`  : Use integer variables representing discrete control
+                           decisions
         """
         super().populate_model(model, mode)
         m = self.model
@@ -77,7 +79,7 @@ class Boiler(ThermalEntity, bl.Boiler):
 
         Returns
         -------
-        gurobi.LinExpr :
+        ExpressionBase :
             Objective function.
         """
         return coeff * pyomo.sum_product(self.model.P_Th_vars)

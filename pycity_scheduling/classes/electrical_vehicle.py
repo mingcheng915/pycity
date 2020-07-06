@@ -1,5 +1,6 @@
 import numpy as np
 import pyomo.environ as pyomo
+from pyomo.core.expr.numeric_expr import ExpressionBase
 
 from .battery import Battery
 from pycity_scheduling import util
@@ -56,7 +57,7 @@ class ElectricalVehicle(Battery):
         self.E_El_SOC_constrs = []
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model.
+        """Add device block to pyomo ConcreteModel
 
         Call parent's `populate_model` method. Replace coupling
         constraints from Battery class with coupling constraints
@@ -64,7 +65,7 @@ class ElectricalVehicle(Battery):
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints
@@ -155,7 +156,7 @@ class ElectricalVehicle(Battery):
 
         Returns
         -------
-        gurobi.QuadExpr :
+        ExpressionBase :
             Objective function.
         """
         m = self.model

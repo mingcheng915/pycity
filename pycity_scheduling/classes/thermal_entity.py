@@ -17,14 +17,14 @@ class ThermalEntity(OptimizationEntity):
         self.new_var("P_Th")
 
     def populate_model(self, model, mode="convex"):
-        """Add variables to Gurobi model.
+        """Add device block to pyomo ConcreteModel.
 
         Add variables for the thermal demand of the entity to the optimization
         model.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

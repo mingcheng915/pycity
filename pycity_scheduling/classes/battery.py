@@ -55,17 +55,17 @@ class Battery(ElectricalEntity, bat.Battery):
         self.E_El_coupl_constrs = []
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model.
+        """Add device block of variables and constraints to pyomo ConcreteModel.
 
         Call parent's `populate_model` method and set variables lower bounds to
-        `-gurobi.GRB.INFINITY`. Then add variables for demand, supply and the
-        state of charge, with their corresponding upper bounds
-        (`self.P_El_Max_Charge`, `self.P_El_Max_Discharge`, `self.E_El_Max`).
-        Finally add continuity constraints to the model.
+        `None`. Then add variables for demand, supply and the state of charge,
+        with their corresponding upper bounds (`self.P_El_Max_Charge`,
+        `self.P_El_Max_Discharge`, `self.E_El_Max`). Finally add continuity
+        constraints to the block.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

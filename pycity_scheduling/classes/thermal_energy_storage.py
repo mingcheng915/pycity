@@ -48,16 +48,15 @@ class ThermalEnergyStorage(ThermalEntity, tes.ThermalEnergyStorage):
         self.E_Th_Init_constr = None
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model
+        """Add device block to pyomo ConcreteModel
 
         Call parent's `populate_model` method and set variables lower bounds
-        to `-gurobi.GRB.INFINITY`. Then add variables for the state of charge
-        with an upper bound of `self.E_Th_Max`. Also add continuity constraints
-        to the model.
+        to `None`. Then add variables for the state of charge with an upper
+        bound of `self.E_Th_Max`. Also add continuity constraints to the model.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

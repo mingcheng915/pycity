@@ -50,14 +50,14 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.constr_previous_start = None
 
     def populate_model(self, model, mode="convex"):
-        """Add variables to Gurobi model
+        """Add device block to pyomo ConcreteModel
 
         Call parent's `populate_model` method and set variables upper bounds to
-        the loadcurve and lower bounds to s`elf.P_El_Min`.
+        the loadcurve and lower bounds to `self.P_El_Min`.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints
@@ -97,13 +97,7 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
                 # update_schedule only needs to modify RHS which should be faster than deleting and creating
                 # new constraints
 
-                # REMOVED
                 max_overlap = max(self.max_low, self.min_full)
-                #max_overlap = min(max_overlap, self.op_horizon)  # cap overlap constraints at op_horizon
-                #for t in range(1, max_overlap + 1):
-                #    self.constr_previous_state.append(model.addConstr(
-                #        gurobi.quicksum(self.P_State_vars[:t]) >= -gurobi.GRB.INFINITY
-                #    ))
 
                 # add constraints forcing the entity to operate at least once at 100% between every range
                 # of max_low + 1 in the op_horizon
@@ -125,20 +119,6 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
 
                 # add constraints to operate at a minimum of min_full timesteps at 100% when switching
                 # from the state 0 to the state 1
-                #if self.min_full > 1:
-                #    next_states = self.P_State_vars[1:self.min_full]
-                #    self.constr_previous_start = model.addConstr(
-                #        self.P_State_vars[0] * len(next_states)
-                #        - gurobi.quicksum(next_states) <=
-                #        gurobi.GRB.INFINITY  # self.P_State_vars[t-1] set via update_model
-                #    )
-                #    for t in self.op_time_vec[:-2]:
-                #        next_states = self.P_State_vars[t + 2: t + self.min_full + 1]
-                #        assert 1 <= len(next_states) <= self.min_full - 1
-                #        model.addConstr(
-                #            (self.P_State_vars[t + 1] - self.P_State_vars[t]) * len(next_states) <=
-                #            gurobi.quicksum(next_states)
-                #        )
                 if self.min_full > 1:
                     def p_on_rule(model, t):
                         e = 0
@@ -171,13 +151,6 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
                 width = self.min_full + self.max_low
 
                 m.previous_n_consumptions = pyomo.Param(pyomo.RangeSet(1, width-1), mutable=True, initialize=self.P_El_Nom)
-                #for t in self.op_time_vec[:-width + 1]:
-                #    next_vars = self.P_El_vars[t:t + width]
-                #    assert len(next_vars) == width
-                #    model.addConstr(
-                #        gurobi.quicksum(next_vars) >=
-                #        self.P_El_Nom * self.min_full + self.P_El_Curt * self.max_low
-                #    )
 
                 def p_average_rule(model, t):
                     e = 0
@@ -193,16 +166,6 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
 
                 m.P_average_constr = pyomo.Constraint(m.t, rule=p_average_rule)
 
-                # creat constraints which can be used by update_model to take previous P_El values into
-                # account. update_schedule only needs to modify RHS which should be faster than deleting
-                # and creating new constraints
-
-                # REMOVED
-                #max_overlap = min(self.max_low + self.min_full - 1, self.op_horizon)
-                #for overlap in range(0, max_overlap):
-                #    self.constr_previous.append(model.addConstr(
-                #        gurobi.quicksum(self.P_El_vars[:overlap + 1]) >= -gurobi.GRB.INFINITY
-                #    ))
         else:
             raise ValueError(
                 "Mode %s is not implemented by CHP." % str(mode)

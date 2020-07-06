@@ -1,6 +1,7 @@
 import numpy as np
 import pyomo.environ as pyomo
-from typing import Callable, Any, Union
+from pyomo.core.expr.numeric_expr import ExpressionBase
+from typing import Callable, Any
 
 class OptimizationEntity(object):
     """
@@ -87,6 +88,18 @@ class OptimizationEntity(object):
         return slice(t1, t2)
 
     def populate_model(self, model, mode=""):
+        """Add entity block to pyomo ConcreteModel.
+
+        Places the block with the name of the entity in the ConcreteModel.
+
+        Parameters
+        ----------
+        model : pyomo.ConcreteModel
+        mode : str, optional
+            Specifies which set of constraints to use
+            - `convex`  : Use linear constraints
+            - `integer`  : May use integer variables
+        """
         # generate empty pyomo block
         self.model = pyomo.Block()
         setattr(model, "_".join([self._kind, self._ID_string]), self.model)
@@ -94,6 +107,17 @@ class OptimizationEntity(object):
         self.model.t = pyomo.RangeSet(0, self.op_horizon-1)
 
     def update_model(self, mode=""):
+        """Update block parameters and bounds.
+
+        Set parameters and bounds according to the current situation of the
+        device according to the previous schedule and the current forecasts.
+
+        Parameters
+        ----------
+        Specifies which set of constraints to use
+            - `convex`  : Use linear constraints
+            - `integer`  : May use integer variables
+        """
         pass
 
     def update_schedule(self):
@@ -130,7 +154,7 @@ class OptimizationEntity(object):
 
         Returns
         -------
-        Union[gurobi.QuadExpr, gurobi.LinExpr] :
+        ExpressionBase :
             Objective function.
         """
         if self.objective is None:

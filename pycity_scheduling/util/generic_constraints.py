@@ -4,12 +4,56 @@ import pyomo.environ as pyomo
 from pycity_scheduling.classes.optimization_entity import OptimizationEntity
 
 class Constraint:
+    """
+    Base class for all generic constraints.
+
+    This class provides functionality common to all generic constraints.
+    Generic constraints can be easily added to an entity block.
+    """
     def apply(self, model):
-        # apply constraint to pyomo model
+        """
+        Apply constraint to block during populate_model method call.
+
+        Parameters
+        ----------
+        model : pyomo.Block
+            The block corresponding to the entity the constraint should
+            be applied to.
+        """
         raise NotImplementedError()
 
 class LowerActivationLimit(Constraint):
+    """
+    Constraint Class for adding lower activation limits
+
+    This class provides functionality to add lower activation limits
+    to entities. Adds no new constraints and variables if not in integer
+    mode or if not required. A new state schedule is also created for
+    the entity.
+    """
     def __init__(self, o, var_name, lower_activation_limit, var_nom):
+        """
+        Initialize Constraint for a specific entity and create the new
+        state schedule.
+
+
+        Parameters
+        ----------
+        o : OptimizationEntity
+            The entity to add the constraint to.
+        var_name : str
+            The variable name the constraint should be applied to.
+        lower_activation_limit : float (0 <= lowerActivationLimit <= 1)
+            Defines the lower activation limit. For example, heat pumps
+            are typically able to operate between 50% part load and rated
+            load. In this case, lowerActivationLimit would be 0.5
+            Two special cases:
+            Linear behaviour: lowerActivationLimit = 0.0
+            Two-point controlled: lowerActivationLimit = 1.0
+        var_nom : float
+            The maximum or minimum value the variable has when operating
+            under maximum load.
+        """
         self.var_nom = var_nom
         self.var_name = var_name
         self.lowerActivationLimit = lower_activation_limit

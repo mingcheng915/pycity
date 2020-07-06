@@ -46,7 +46,7 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
         self.Activation_constr = LowerActivationLimit(self, "P_Th", lower_activation_limit, -P_Th_nom)
 
     def populate_model(self, model, mode="convex"):
-        """Add variables and constraints to Gurobi model.
+        """Add device block to pyomo ConcreteModel.
 
         Call both parents' `populate_model` methods and set the upper bounds
         of the thermal variables to `self.P_Th_Nom`, the lower bounds of the
@@ -55,7 +55,7 @@ class CombinedHeatPower(ThermalEntity, ElectricalEntity, chp.CHP):
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints

@@ -155,11 +155,14 @@ def populate_models(city_district, mode, algorithm, robustness):
         Define which algorithm the models are used for. Must be one of
         'exchange-admm', 'dual-decompostition', 'stand-alone', 'local' or
         'central'.
-
+    robustness : tuple, optional
+        Tuple of two floats. First entry defines how many time steps are
+        protected from deviations. Second entry defines the magnitude of
+        deviations which are considered.
     Returns
     -------
     dict :
-        int -> gurobipy.Model
+        int -> pyomo.ConcreteModel
         `0` : Central or aggregator model.
         node ids : Bulding models.
     """

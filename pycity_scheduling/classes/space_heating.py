@@ -97,14 +97,14 @@ class SpaceHeating(ThermalEntity, sh.SpaceHeating):
         self.P_Th_Schedule = p
 
     def update_model(self, mode=""):
-        """Update model variables.
+        """Add device block to pyomo ConcreteModel.
 
         Set variable bounds to equal the given demand, as pure space heating does
         not provide any flexibility.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
         """
         m = self.model

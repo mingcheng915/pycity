@@ -78,17 +78,17 @@ class Building(EntityContainer, bd.Building):
         self.robust_constrs = []
 
     def populate_model(self, model, mode="convex", robustness=None):
-        """Add variables and constraints to Gurobi model.
+        """Add building block to pyomo ConcreteModel.
 
         Call parent's `populate_model` method and set variables lower
-        bounds to `-gurobi.GRB.INFINITY`. Then call `populate_model` method
-        of the BES and all contained apartments and add constraints that the
-        sum of their variables for each period period equals the corresponding
-        own variable.
+        bounds to `None`. Then call `populate_model` method of the BES
+        and all contained apartments and add constraints that the sum
+        of their variables for each period period equals the
+        corresponding own variable.
 
         Parameters
         ----------
-        model : gurobi.Model
+        model : pyomo.ConcreteModel
         mode : str, optional
             Specifies which set of constraints to use
             - `convex`  : Use linear constraints
@@ -185,12 +185,6 @@ class Building(EntityContainer, bd.Building):
                 m.upper_robustness_bounds[t] = end_value
 
     def get_lower_entities(self):
-        """
-
-        Yields
-        ------
-        All contained entities.
-        """
         if self.hasBes:
             yield self.bes
         yield from self.apartments
