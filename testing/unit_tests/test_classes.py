@@ -138,7 +138,11 @@ class TestBoiler(unittest.TestCase):
         self.assertEqual(TerminationCondition.optimal, results.solver.termination_condition)
         bl.model.P_Th_vars[0].setub(-0.1)
         bl.model.P_Th_vars[0].setlb(-4.9)
+        logger = logging.getLogger("pyomo.core")
+        oldlevel = logger.level
+        logger.setLevel(logging.ERROR)
         results = solve_model(model)
+        logger.setLevel(oldlevel)
         self.assertEqual(TerminationCondition.infeasible, results.solver.termination_condition)
 
 
@@ -502,6 +506,9 @@ class TestCityDistrict(unittest.TestCase):
     def test_get_objective(self):
         m = pyomo.ConcreteModel()
         self.cd.populate_model(m)
+        def zero_constr(model, t):
+            return model.P_El_vars[t] == 0
+        self.cd.model.extra_constr = pyomo.Constraint(self.cd.model.t, rule=zero_constr)
         m.o = pyomo.Objective(expr=self.cd.get_objective())
         solve_model(m)
 
@@ -998,7 +1005,7 @@ class TestHeatPump(unittest.TestCase):
         hp = HeatPump(e, 10, lower_activation_limit=0.5)
         m = pyomo.ConcreteModel()
         hp.populate_model(m, "integer")
-        hp.update_model(m, "integer")
+        hp.update_model("integer")
         obj = pyomo.sum_product(hp.model.P_Th_vars, hp.model.P_Th_vars)
         obj += 2 * 3 * pyomo.sum_product(hp.model.P_Th_vars)
         m.o = pyomo.Objective(expr=obj)
