@@ -232,6 +232,40 @@ class TestBuilding(unittest.TestCase):
         bd5 = Building(env, "invalid")
         self.assertRaisesRegex(ValueError, ".*Building.*", bd5.get_objective)
 
+    def testReset(self):
+        env = self.bd.environment
+        bes = BuildingEnergySystem(env)
+        self.bd.addEntity(bes)
+        schedules = list(self.bd.schedules.keys())
+        model = pyomo.ConcreteModel()
+        self.bd.populate_model(model)
+        self.bd.update_model()
+        model.o = pyomo.Objective(expr=pyomo.sum_product(self.bd.model.P_El_vars))
+        solve_model(model)
+        self.assertEqual(schedules, list(self.bd.schedules.keys()))
+        self.bd.update_schedule()
+        self.assertEqual(schedules, list(self.bd.schedules.keys()))
+        self.bd.schedules["Ref"]["P_El"] = np.arange(8)
+        self.bd.copy_schedule("new", "Ref")
+        schedules.append("new")
+        self.bd.reset("Ref")
+        for k in schedules:
+            if k == "new":
+                e = np.arange(8)
+            else:
+                e = np.zeros(8)
+            assert_equal_array(self.bd.schedules[k]["P_El"], e)
+        self.bd.reset()
+        for k in schedules:
+            assert_equal_array(self.bd.schedules[k]["P_El"], np.zeros(8))
+        self.assertEqual(schedules, list(self.bd.schedules.keys()))
+        with self.assertRaises(KeyError):
+            self.bd.load_schedule("nonexistent")
+            self.bd.P_El_Schedule
+        with self.assertRaises(KeyError):
+            self.bd.load_schedule(None)
+            self.bd.P_El_Schedule
+
 
 class TestCurtailableLoad(unittest.TestCase):
     combinations = [(4, 1), (3, 1), (2, 1), (1, 1),

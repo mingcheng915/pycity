@@ -185,7 +185,8 @@ class OptimizationEntity(object):
         if name is None:
             for name in self.schedules.keys():
                 self.new_schedule(name)
-        self.new_schedule(name)
+        else:
+            self.new_schedule(name)
 
     def get_entities(self):
         top = False
@@ -229,7 +230,7 @@ class OptimizationEntity(object):
         schedule : str
             Name of new schedule.
         """
-        self.schedules[schedule] = {name: np.full_like(entries, 0)for name, entries in self.current_schedule.keys()}
+        self.schedules[schedule] = {name: np.full_like(entries, 0) for name, entries in self.schedule.items()}
         for e in self.get_lower_entities():
             e.new_schedule(schedule)
 

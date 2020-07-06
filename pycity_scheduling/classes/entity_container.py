@@ -79,7 +79,7 @@ class EntityContainer(ThermalEntity, ElectricalEntity):
             Name of schedule to reset.
             If None resets all schedules.
         """
-        super().reset(self, schedule)
+        super().reset(schedule)
 
         for entity in self.get_lower_entities():
             entity.reset(schedule)
