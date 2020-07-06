@@ -75,8 +75,6 @@ class Building(EntityContainer, bd.Building):
         self.building_type = building_type
         self.storage_end_equality = storage_end_equality
 
-        self.robust_constrs = []
-
     def populate_model(self, model, mode="convex", robustness=None):
         """Add building block to pyomo ConcreteModel.
 

@@ -54,7 +54,6 @@ class ElectricalVehicle(Battery):
                                                   ct_pattern)
 
         self.new_var("P_El_Drive")
-        self.E_El_SOC_constrs = []
 
     def populate_model(self, model, mode="convex"):
         """Add device block to pyomo ConcreteModel

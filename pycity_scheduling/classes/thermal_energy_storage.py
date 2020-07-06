@@ -45,7 +45,6 @@ class ThermalEnergyStorage(ThermalEntity, tes.ThermalEnergyStorage):
         )
 
         self.new_var("E_Th")
-        self.E_Th_Init_constr = None
 
     def populate_model(self, model, mode="convex"):
         """Add device block to pyomo ConcreteModel

@@ -15,7 +15,6 @@ class ElectricalEntity(OptimizationEntity):
         super().__init__(environment, *args, **kwargs)
 
         self.new_var("P_El")
-        self.max_consumption_var = None
 
     def populate_model(self, model, mode="convex"):
         """Add device block to pyomo ConcreteModel.

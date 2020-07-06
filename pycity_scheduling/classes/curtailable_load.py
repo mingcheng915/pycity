@@ -45,9 +45,6 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.min_full = min_full
         self.P_El_Curt = self.P_El_Nom * self.max_curt
         self.new_var("P_State", dtype=np.bool, func=lambda model, t: pyomo.value(model.P_El_vars[t] > 0.99*P_El_Nom))
-        self.constr_previous_state = []
-        self.constr_previous = []
-        self.constr_previous_start = None
 
     def populate_model(self, model, mode="convex"):
         """Add device block to pyomo ConcreteModel
