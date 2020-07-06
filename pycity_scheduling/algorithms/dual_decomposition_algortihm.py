@@ -23,7 +23,7 @@ def dual_decomposition(city_district, optimizer="gurobi_persistent", mode="conve
         - `convex`  : Use linear constraints
         - `integer`  : May use non-linear constraints
     models : dict, optional
-        Holds a `gurobi.Model` for each node and the aggregator.
+        Holds a `pyomo.ConcreteModel` for each node and the aggregator.
     eps_primal : float, optional
         Primal stopping criterion for the dual decomposition algorithm.
     rho : float, optional

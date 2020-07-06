@@ -27,7 +27,7 @@ def exchange_admm(city_district, optimizer="gurobi_persistent", mode="convex", m
         - `convex`  : Use linear constraints
         - `integer`  : May use non-linear constraints
     models : dict, optional
-        Holds a `gurobi.Model` for each node and the aggregator.
+        Holds a `pyomo.ConcreteModel` for each node and the aggregator.
     beta : float, optional
         Tradeoff factor between system and customer objective. The customer
         objective is multiplied with beta.

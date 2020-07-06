@@ -23,7 +23,7 @@ def stand_alone_optimization(city_district, optimizer="gurobi_persistent", mode=
         - `convex`  : Use linear constraints
         - `integer`  : May use non-linear constraints
     models : dict, optional
-        Holds a single `gurobi.Model` for the whole district.
+        Holds a single `pyomo.ConcreteModel` for the whole district.
     robustness : tuple, optional
         Not used here. Parameter exists for consistency among algorithms.
     debug : bool, optional

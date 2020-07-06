@@ -26,7 +26,7 @@ def central_optimization(city_district, optimizer="gurobi_persistent", mode="con
             - `convex`  : Use linear constraints
             - `integer`  : May use non-linear constraints
     models : dict, optional
-        Holds a single `gurobi.Model` for the whole district.
+        Holds a single `pyomo.ConcreteModel` for the whole district.
     beta : float, optional
         Tradeoff factor between system and customer objective. The customer
         objective is multiplied with beta.
