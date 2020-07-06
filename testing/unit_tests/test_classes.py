@@ -69,7 +69,7 @@ class TestBattery(unittest.TestCase):
         model = pyomo.ConcreteModel()
         self.bat.populate_model(model)
         demand_var = self.bat.model.P_El_vars
-        self.bat.update_model(model)
+        self.bat.update_model()
         model.c1 = pyomo.Constraint(expr=self.bat.model.E_El_vars[0] == 10)
         obj = pyomo.sum_product(demand_var, demand_var)
         model.o = pyomo.Objective(expr=obj)
@@ -80,7 +80,7 @@ class TestBattery(unittest.TestCase):
     def test_update_schedule(self):
         model = pyomo.ConcreteModel()
         self.bat.populate_model(model)
-        self.bat.update_model(model)
+        self.bat.update_model()
         self.bat.model.P_El_Demand_vars.setlb(3)
         self.bat.model.P_El_Demand_vars.setub(3)
         self.bat.model.P_El_Supply_vars.setlb(0)
@@ -132,7 +132,7 @@ class TestBoiler(unittest.TestCase):
         bl = Boiler(e, 10, lower_activation_limit=0.5)
         model = pyomo.ConcreteModel()
         bl.populate_model(model, "integer")
-        bl.update_model(model, "integer")
+        bl.update_model("integer")
         model.o = pyomo.Objective(expr=bl.model.P_Th_vars[0])
         results = solve_model(model)
         self.assertEqual(TerminationCondition.optimal, results.solver.termination_condition)
@@ -150,7 +150,7 @@ class TestBuilding(unittest.TestCase):
     def test_get_objective(self):
         m = pyomo.ConcreteModel()
         self.bd.populate_model(m)
-        self.bd.update_model(m)
+        self.bd.update_model()
         solve_model(m)
 
         self.bd.environment.prices.tou_prices = np.array([1]*2 + [4]*6)
@@ -291,7 +291,7 @@ class TestCurtailableLoad(unittest.TestCase):
                 solve_model(model)
                 for t in range(0, 20-5+1, width):
                     self.e.timer.currentTimestep = t
-                    cl.update_model(model)
+                    cl.update_model()
                     solve_model(model)
                     cl.update_schedule()
                     self.assertAlmostEqual(5, pyomo.value(obj))
@@ -309,7 +309,7 @@ class TestCurtailableLoad(unittest.TestCase):
                     solve_model(model)
                     for t in range(0, 20-5+1, width):
                         self.e.timer.currentTimestep = t
-                        cl.update_model(model)
+                        cl.update_model()
                         solve_model(model)
                         cl.update_schedule()
 
@@ -332,7 +332,7 @@ class TestCurtailableLoad(unittest.TestCase):
                     obj = pyomo.sum_product(cl.model.P_El_vars)
                     for t in range(0, 20-5+1, width):
                         self.e.timer.currentTimestep = t
-                        cl.update_model(model, mode="integer")
+                        cl.update_model(mode="integer")
                         model.o = pyomo.Objective(expr=obj)
                         results = solve_model(model)
                         self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
@@ -366,7 +366,7 @@ class TestCurtailableLoad(unittest.TestCase):
                     self.e.timer.currentTimestep = 1
                     cl.P_State_Schedule[0] = False
                     cl.P_El_Schedule[0] = 1
-                    cl.update_model(model, "integer")
+                    cl.update_model("integer")
 
                     cl.model.P_State_vars[0].setub(1)
                     cl.model.P_State_vars[0].setlb(1)
@@ -397,7 +397,7 @@ class TestCurtailableLoad(unittest.TestCase):
                         model.o = pyomo.Objective(expr=obj)
                         for t in range(0, 21 - horizon, width):
                             e.timer.currentTimestep = t
-                            cl.update_model(model)
+                            cl.update_model()
                             solve_model(model)
                             self.assertEqual(1, pyomo.value(cl.model.P_El_vars[0]))
                             cl.update_schedule()
@@ -419,7 +419,7 @@ class TestCurtailableLoad(unittest.TestCase):
                             model.c = pyomo.Objective(expr=obj)
                             for t in range(0, 21 - horizon, width):
                                 e.timer.currentTimestep = t
-                                cl.update_model(model)
+                                cl.update_model()
                                 solve_model(model)
                                 cl.update_schedule()
 
@@ -442,7 +442,7 @@ class TestCurtailableLoad(unittest.TestCase):
                             obj = pyomo.sum_product(cl.model.P_El_vars)
                             for t in range(0, 21 - horizon, width):
                                 e.timer.currentTimestep = t
-                                cl.update_model(model, mode="integer")
+                                cl.update_model(mode="integer")
                                 model.o = pyomo.Objective(expr=obj)
                                 results = solve_model(model)
                                 self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
@@ -588,7 +588,7 @@ class TestCombinedHeatPower(unittest.TestCase):
         chp = CombinedHeatPower(e, 10, 10, 0.8, 0.5)
         m = pyomo.ConcreteModel()
         chp.populate_model(m, "integer")
-        chp.update_model(m, "integer")
+        chp.update_model("integer")
         obj = pyomo.sum_product(chp.model.P_El_vars, chp.model.P_El_vars)
         obj += 2*3 * pyomo.sum_product(chp.model.P_El_vars)
         m.o = pyomo.Objective(expr=obj)
@@ -608,13 +608,13 @@ class TestDeferrableLoad(unittest.TestCase):
         dl.populate_model(model)
         obj = pyomo.sum_product(dl.model.P_El_vars, dl.model.P_El_vars)
         model.o = pyomo.Objective(expr=obj)
-        dl.update_model(model)
+        dl.update_model()
         solve_model(model)
 
         self.assertAlmostEqual(10, pyomo.value(pyomo.sum_product(dl.model.P_El_vars)) * dl.time_slot, places=5)
 
         dl.timer.mpc_update()
-        dl.update_model(model)
+        dl.update_model()
         solve_model(model)
 
         for t, c in enumerate(self.lt[1:7]):
@@ -629,7 +629,7 @@ class TestDeferrableLoad(unittest.TestCase):
         feasible = DeferrableLoad(self.e, 10, 10, load_time=self.lt)
         m = pyomo.ConcreteModel()
         feasible.populate_model(m)
-        feasible.update_model(m)
+        feasible.update_model()
         obj = pyomo.sum_product(feasible.model.P_El_vars)
         m.o = pyomo.Objective(expr=obj)
         results = solve_model(m)
@@ -638,7 +638,7 @@ class TestDeferrableLoad(unittest.TestCase):
         m = pyomo.ConcreteModel()
         infeasible = DeferrableLoad(self.e, 10, 10.6, load_time=self.lt)
         infeasible.populate_model(m)
-        infeasible.update_model(m)
+        infeasible.update_model()
         obj = pyomo.sum_product(infeasible.model.P_El_vars)
         m.o = pyomo.Objective(expr=obj)
         logger = logging.getLogger("pyomo.core")
@@ -655,7 +655,7 @@ class TestDeferrableLoad(unittest.TestCase):
 
         obj = pyomo.sum_product([0] * 2 + [1] * 2 + [0] * 2, dl.model.P_El_vars, dl.model.P_El_vars)
         m.o = pyomo.Objective(expr=obj)
-        dl.update_model(m, mode="integer")
+        dl.update_model(mode="integer")
         results = solve_model(m)
         self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
         dl.update_schedule()
@@ -663,7 +663,7 @@ class TestDeferrableLoad(unittest.TestCase):
         assert_equal_array(dl.P_El_Schedule[:6], [0, 19, 19, 0, 0, 0])
         for _ in range(3):
             dl.timer.mpc_update()
-            dl.update_model(m, mode="integer")
+            dl.update_model(mode="integer")
             results = solve_model(m)
             self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
             dl.update_schedule()
@@ -675,7 +675,7 @@ class TestDeferrableLoad(unittest.TestCase):
         dl = DeferrableLoad(e, 19, 9.5, load_time=self.lt)
         model = pyomo.ConcreteModel()
         dl.populate_model(model, mode="integer")
-        dl.update_model(model, mode="integer")
+        dl.update_model(mode="integer")
         obj = pyomo.sum_product(dl.model.P_El_vars)
         model.o = pyomo.Objective(expr=obj)
         logger = logging.getLogger("pyomo.core")
@@ -688,7 +688,7 @@ class TestDeferrableLoad(unittest.TestCase):
         dl = DeferrableLoad(self.e, 19, 19, load_time=self.lt)
         model = pyomo.ConcreteModel()
         dl.populate_model(model, mode="integer")
-        dl.update_model(model, mode="integer")
+        dl.update_model(mode="integer")
         obj = pyomo.sum_product(dl.model.P_El_vars)
         model.o = pyomo.Objective(expr=obj)
         logger = logging.getLogger("pyomo.core")
@@ -701,7 +701,7 @@ class TestDeferrableLoad(unittest.TestCase):
         dl = DeferrableLoad(self.e, 19, 19*3/4, load_time=self.lt)
         model = pyomo.ConcreteModel()
         dl.populate_model(model, mode="integer")
-        dl.update_model(model, mode="integer")
+        dl.update_model(mode="integer")
         obj = pyomo.sum_product(dl.model.P_El_vars)
         model.o = pyomo.Objective(expr=obj)
         results = solve_model(model)
@@ -856,7 +856,7 @@ class TestElectricalHeater(unittest.TestCase):
         eh = ElectricalHeater(e, 10, lower_activation_limit=0.5)
         m = pyomo.ConcreteModel()
         eh.populate_model(m, "integer")
-        eh.update_model(m, "integer")
+        eh.update_model("integer")
         obj = pyomo.sum_product(eh.model.P_El_vars, eh.model.P_El_vars)
         obj += -2 * 3 * pyomo.sum_product(eh.model.P_El_vars)
         m.o = pyomo.Objective(expr=obj)
@@ -895,7 +895,7 @@ class TestElectricVehicle(unittest.TestCase):
     def test_update_model(self):
         model = pyomo.ConcreteModel()
         self.ev.populate_model(model)
-        self.ev.update_model(model)
+        self.ev.update_model()
         model.o = pyomo.Objective(expr=self.ev.get_objective())
         solve_model(model)
 
@@ -903,7 +903,7 @@ class TestElectricVehicle(unittest.TestCase):
         self.assertAlmostEqual(2, self.ev.model.E_El_vars[3].value, places=5)
 
         self.ev.timer.mpc_update()
-        self.ev.update_model(model)
+        self.ev.update_model()
         solve_model(model)
 
         for t, c in enumerate(self.ct[1:7]):
@@ -921,7 +921,7 @@ class TestElectricVehicle(unittest.TestCase):
 
         self.ev.timer.mpc_update()
         self.ev.timer.mpc_update()
-        self.ev.update_model(model)
+        self.ev.update_model()
         solve_model(model)
 
         self.assertAlmostEqual(5, self.ev.model.E_El_vars[5].value, places=5)
@@ -929,7 +929,7 @@ class TestElectricVehicle(unittest.TestCase):
     def test_get_objective(self):
         model = pyomo.ConcreteModel()
         self.ev.populate_model(model)
-        self.ev.update_model(model)
+        self.ev.update_model()
 
         obj = self.ev.get_objective(11)
         for i in range(6):
@@ -946,7 +946,7 @@ class TestHeatPump(unittest.TestCase):
     def test_update_model(self):
         m = pyomo.ConcreteModel()
         self.hp.populate_model(m)
-        self.hp.update_model(m)
+        self.hp.update_model()
 
         c = self.hp.model.p_coupl_constr[0]
         f, l = pyomo.current.decompose_term(c.body)
@@ -1022,7 +1022,7 @@ class TestThermalEnergyStorage(unittest.TestCase):
     def test_update_schedule(self):
         m = pyomo.ConcreteModel()
         self.tes.populate_model(m)
-        self.tes.update_model(m)
+        self.tes.update_model()
         for t in range(3):
             self.tes.model.P_Th_vars[t].setub(t)
             self.tes.model.P_Th_vars[t].setlb(t)
@@ -1044,7 +1044,7 @@ class TestThermalEntity(unittest.TestCase):
     def test_update_schedule(self):
         m = pyomo.ConcreteModel()
         self.th.populate_model(m)
-        self.th.update_model(m)
+        self.th.update_model()
         for t in range(4):
             self.th.model.P_Th_vars[t].setub(t)
             self.th.model.P_Th_vars[t].setlb(t)

@@ -46,7 +46,7 @@ class WindEnergyConverter(ElectricalEntity, wec.WindEnergyConverter):
         log_wind = self._logWindProfile(total_wind)
         return np.interp(log_wind, self.velocity, self.power, right=0)
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         m = self.model
         timestep = self.timestep
 

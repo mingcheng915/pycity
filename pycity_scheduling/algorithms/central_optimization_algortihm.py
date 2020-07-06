@@ -44,12 +44,12 @@ def central_optimization(city_district, optimizer="gurobi_persistent", mode="con
     if models is None:
         models = populate_models(city_district, mode, 'central', robustness)
     model = models[0]
-    city_district.update_model(model, mode)
+    city_district.update_model(mode)
 
     obj = city_district.get_objective()
     for node_id, node in nodes.items():
         entity = node['entity']
-        entity.update_model(model, mode, robustness=robustness)
+        entity.update_model(mode, robustness=robustness)
         obj += entity.get_objective(beta)
     model.o = pyomo.Objective(expr=obj)
 

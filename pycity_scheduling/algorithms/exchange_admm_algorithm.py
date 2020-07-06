@@ -97,9 +97,9 @@ def exchange_admm(city_district, optimizer="gurobi_persistent", mode="convex", m
     for node_id, node in nodes.items():
         old_P_El_Schedule[node_id] = np.zeros(op_horizon)
         current_P_El_Schedule[node_id] = np.zeros(op_horizon)
-        node['entity'].update_model(models[node_id], mode, robustness=robustness)
+        node['entity'].update_model(mode, robustness=robustness)
 
-    city_district.update_model(models[0], mode)
+    city_district.update_model(mode)
 
     # prepare solver if persistent
     optimizers = {0: pyomo.SolverFactory(optimizer)}

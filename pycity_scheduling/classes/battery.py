@@ -121,7 +121,7 @@ class Battery(ElectricalEntity, bat.Battery):
                 "Mode %s is not implemented by battery." % str(mode)
             )
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         m = self.model
         timestep = self.timestep
 

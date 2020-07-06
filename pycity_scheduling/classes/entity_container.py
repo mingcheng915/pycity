@@ -51,10 +51,10 @@ class EntityContainer(ThermalEntity, ElectricalEntity):
                 "Mode %s is not implemented by EntityContainer." % str(mode)
             )
 
-    def update_model(self, model, mode=""):
-        super().update_model(model, mode)
+    def update_model(self, mode=""):
+        super().update_model(mode)
         for entity in self.get_lower_entities():
-            entity.update_model(model, mode)
+            entity.update_model(mode)
 
     def update_schedule(self):
         """Update the schedule with the scheduling model solution."""

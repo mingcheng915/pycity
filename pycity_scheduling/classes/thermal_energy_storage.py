@@ -90,7 +90,7 @@ class ThermalEnergyStorage(ThermalEntity, tes.ThermalEnergyStorage):
                 "Mode %s is not implemented by TES." % str(mode)
             )
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         m = self.model
         timestep = self.timestep
 

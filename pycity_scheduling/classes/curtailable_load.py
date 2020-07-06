@@ -209,8 +209,8 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
             )
 
 
-    def update_model(self, model, mode="convex"):
-        super(CurtailableLoad, self).update_model(model, mode)
+    def update_model(self, mode="convex"):
+        super(CurtailableLoad, self).update_model(mode)
         m = self.model
         timestep = self.timer.currentTimestep
         if hasattr(m, "previous_n_states"):

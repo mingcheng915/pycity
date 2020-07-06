@@ -37,12 +37,12 @@ def stand_alone_optimization(city_district, optimizer="gurobi_persistent", mode=
         models = populate_models(city_district, mode, 'stand-alone', robustness)
     model = models[0]
 
-    city_district.update_model(model, mode)
+    city_district.update_model(mode)
 
     obj = 0.0
     for node_id, node in nodes.items():
         entity = node['entity']
-        entity.update_model(model, mode, robustness=robustness)
+        entity.update_model(mode, robustness=robustness)
         for ent in entity.get_entities():
             o = ent.get_objective()
             if o is not None:

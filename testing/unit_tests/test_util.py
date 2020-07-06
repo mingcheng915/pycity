@@ -57,9 +57,9 @@ class TestFactory(unittest.TestCase):
                                          type(e) == all_entities[d_id]))
 
         m = util.populate_models(district, "convex", "central", None)[0]
-        district.update_model(m, "convex")
+        district.update_model("convex")
         for node_id, node in district.nodes.items():
-            node['entity'].update_model(m, "convex")
+            node['entity'].update_model("convex")
         m.o = pyomo.Objective(expr=district.get_objective())
 
         # check feasibility

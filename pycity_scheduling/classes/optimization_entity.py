@@ -93,7 +93,7 @@ class OptimizationEntity(object):
         # add time
         self.model.t = pyomo.RangeSet(0, self.op_horizon-1)
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         pass
 
     def update_schedule(self):

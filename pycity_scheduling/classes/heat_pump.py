@@ -96,7 +96,7 @@ class HeatPump(ThermalEntity, ElectricalEntity, hp.Heatpump):
                 "Mode %s is not implemented by heat pump." % str(mode)
             )
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         m = self.model
         cop = self.COP[self.op_slice]
         for t in self.op_time_vec:

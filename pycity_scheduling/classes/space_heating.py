@@ -96,7 +96,7 @@ class SpaceHeating(ThermalEntity, sh.SpaceHeating):
         p = self.loadcurve[ts:ts+self.simu_horizon] / 1000
         self.P_Th_Schedule = p
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         """Update model variables.
 
         Set variable bounds to equal the given demand, as pure space heating does

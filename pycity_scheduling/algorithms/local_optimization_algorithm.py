@@ -38,12 +38,12 @@ def local_optimization(city_district, optimizer="gurobi_persistent", mode="conve
     if models is None:
         models = populate_models(city_district, mode, 'local', robustness)
     model = models[0]
-    city_district.update_model(model, mode)
+    city_district.update_model(mode)
 
     obj = 0.0
     for node_id, node in nodes.items():
         entity = node['entity']
-        entity.update_model(model, mode, robustness=robustness)
+        entity.update_model(mode, robustness=robustness)
         obj += entity.get_objective()
     model.o = pyomo.Objective(expr=obj)
 

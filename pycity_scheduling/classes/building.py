@@ -110,11 +110,11 @@ class Building(EntityContainer, bd.Building):
 
 
 
-    def update_model(self, model, mode="", robustness=None):
-        super().update_model(model, mode)
+    def update_model(self, mode="", robustness=None):
+        super().update_model(mode)
 
         if robustness is not None and self.bes.hasTes:
-            self._update_robust_constraints(model, robustness)
+            self._update_robust_constraints(robustness)
 
 
     def _create_robust_constraints(self):
@@ -132,7 +132,7 @@ class Building(EntityContainer, bd.Building):
         m.upper_robustness_constr = pyomo.Constraint(m.t, rule=e_upper_rule)
 
 
-    def _update_robust_constraints(self, model, robustness):
+    def _update_robust_constraints(self, robustness):
         m = self.model
         timestep = self.timer.currentTimestep
         E_Th_Max = self.bes.tes.E_Th_Max

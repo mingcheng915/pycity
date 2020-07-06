@@ -140,7 +140,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                 "Mode %s is not implemented by deferrable load." % str(mode)
             )
 
-    def update_model(self, model, mode="convex"):
+    def update_model(self, mode="convex"):
         m = self.model
         if mode == "convex":
             load_time = self.load_time[self.op_slice]

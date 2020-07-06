@@ -90,7 +90,7 @@ class ElectricalVehicle(Battery):
             return model.E_El_vars[t] == E_El_last + delta
         m.E_constr = pyomo.Constraint(m.t, rule=e_rule)
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         m = self.model
 
         timestep = self.timestep

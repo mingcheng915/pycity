@@ -54,7 +54,7 @@ class Photovoltaic(ElectricalEntity, pv.PV):
         ts = self.timer.time_in_year(from_init=True)
         self.P_El_Supply = self.totalPower[ts:ts+self.simu_horizon] / 1000
 
-    def update_model(self, model, mode=""):
+    def update_model(self, mode=""):
         m = self.model
         timestep = self.timestep
 
