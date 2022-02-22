@@ -153,8 +153,8 @@ def main(do_plot=False):
 
     if save_schedule:
         entities = list(cd.get_all_entities())
-        schedule_to_csv(entities, file_name="example_19", schedule=["ref", "default"])
-        schedule_to_json(entities, file_name="example_19", schedule=["ref", "default"])
+        schedule_to_csv(entities, file_name="example_20", schedule=["ref", "default"])
+        schedule_to_json(entities, file_name="example_20", schedule=["ref", "default"])
 
         # Plot the city district hierarchy and its lower-level devices into the current directory:
         plot_entity_directory(cd, ["ref", "default"], levels=2)
