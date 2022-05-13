@@ -66,8 +66,7 @@ class TestConstraints(unittest.TestCase):
 
         lal_constr.apply(ee.model, "convex")
         self.assertEqual(_get_constr_count(ee.model), 0)
-        opt = pyomo.SolverFactory(solvers.DEFAULT_SOLVER)
-        opt.solve(m)
+        solve_model(m)
         ee.update_schedule()
         for i in ee.op_time_vec:
             self.assertAlmostEqual(ee.p_el_schedule[i], 0.3, 4)
@@ -76,7 +75,7 @@ class TestConstraints(unittest.TestCase):
         lal_constr.apply(ee.model, "integer")
         self.assertEqual(_get_constr_count(ee.model), 12*2)
 
-        opt.solve(m)
+        solve_model(m)
         ee.update_schedule()
         for i in ee.op_time_vec:
             self.assertAlmostEqual(ee.p_el_schedule[i], 0.5, 4)
@@ -317,11 +316,10 @@ class TestSubpackage(unittest.TestCase):
             util.extract_pyomo_values(v)
 
         m = pyomo.ConcreteModel()
-        opt = pyomo.SolverFactory(solvers.DEFAULT_SOLVER)
 
         m.v = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.v == 1.0)
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(1, e)
         self.assertIs(float, type(e))
@@ -330,7 +328,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Reals)
-        opt.solve(m)
+        solve_model(m)
 
         m.v[1].value = 1
         m.v[2].value = 2
@@ -343,7 +341,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(4, 5))
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(4, e)
 
@@ -351,7 +349,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(4.1, 4.3))
-        opt.solve(m)
+        solve_model(m)
         with self.assertRaises(SchedulingError):
             util.extract_pyomo_values(m.v)
 
@@ -359,7 +357,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Binary, bounds=(0.1, 0.9))
-        opt.solve(m)
+        solve_model(m)
         with self.assertRaises(SchedulingError):
             util.extract_pyomo_values(m.v)
 
@@ -367,7 +365,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(3.9, 4.3))
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(4, e)
         self.assertIs(int, type(e))
@@ -376,7 +374,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers)
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(0, e)
         self.assertIs(int, type(e))
@@ -385,7 +383,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(None, -5))
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(-5, e)
         self.assertIs(int, type(e))
@@ -394,7 +392,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(-10, -2))
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(-2, e)
         self.assertIs(int, type(e))
@@ -403,7 +401,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(2, 10))
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(2, e)
         self.assertIs(int, type(e))
@@ -412,7 +410,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Binary)
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(0, e[0])
         self.assertEqual(0, e[1])
@@ -422,7 +420,7 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Binary, bounds=(1, None))
-        opt.solve(m)
+        solve_model(m)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(1, e[0])
         self.assertEqual(1, e[1])
@@ -446,3 +444,12 @@ class TimerStub:
         if not from_init:
             raise ValueError
         return 12
+
+
+def solve_model(model):
+    # hack to suppress pyomo no constraint warning
+    if not hasattr(model, "simple_var"):
+        model.simple_var = pyomo.Var(domain=pyomo.Reals, bounds=(None, None), initialize=0)
+        model.simple_constr = pyomo.Constraint(expr=model.simple_var == 1)
+    opt = pyomo.SolverFactory(solvers.DEFAULT_SOLVER)
+    return opt.solve(model, **solvers.DEFAULT_SOLVER_OPTIONS.get("solve", {}))

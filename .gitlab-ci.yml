@@ -19,6 +19,8 @@ prepare:
   script:
     - mkdir -p /.docker
     - cp ${CI_PROJECT_DIR}/requirements.txt /.docker/
+    - mkdir -p /.docker/gitlab-utils
+    - cp ${CI_PROJECT_DIR}/gitlab-utils/pyomo_scipampl.patch /.docker/gitlab-utils/
     - docker build -f ${DOCKER_FILE} --target python37 -t ${DOCKER_IMAGE}:python37 /.docker
     - docker push ${DOCKER_IMAGE}:python37
     - docker build -f ${DOCKER_FILE} --target python38 -t ${DOCKER_IMAGE}:python38 /.docker
@@ -34,7 +36,7 @@ test-prerequisites-python37:
   stage: test
   image: ${DOCKER_IMAGE}:python37
   script:
-    - python3 -m pytest --pyargs pycity_base
+    - python3.7 -m pytest --pyargs pycity_base
   tags:
    - docker
 
@@ -42,7 +44,7 @@ test-prerequisites-python38:
   stage: test
   image: ${DOCKER_IMAGE}:python38
   script:
-    - python3 -m pytest --pyargs pycity_base
+    - python3.8 -m pytest --pyargs pycity_base
   tags:
    - docker
 
@@ -50,7 +52,7 @@ test-prerequisites-python39:
   stage: test
   image: ${DOCKER_IMAGE}:python39
   script:
-    - python3 -m pytest --pyargs pycity_base
+    - python3.9 -m pytest --pyargs pycity_base
   tags:
    - docker
 
@@ -60,8 +62,8 @@ unittest-gurobi-python37:
   image: ${DOCKER_IMAGE}:python37
   script:
     - mv $GUROBI_LIC /opt/gurobi/gurobi.lic
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
-    - python3 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
+    - python3.7 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.7 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
   tags:
    - docker
 
@@ -70,8 +72,8 @@ unittest-gurobi-python38:
   image: ${DOCKER_IMAGE}:python38
   script:
     - mv $GUROBI_LIC /opt/gurobi/gurobi.lic
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
-    - python3 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
+    - python3.8 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.8 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
   tags:
    - docker
 
@@ -80,8 +82,8 @@ unittest-gurobi-python39:
   image: ${DOCKER_IMAGE}:python39
   script:
     - mv $GUROBI_LIC /opt/gurobi/gurobi.lic
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
-    - python3 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
+    - python3.9 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.9 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
   tags:
    - docker
 
@@ -92,8 +94,8 @@ unittest-scip-python37:
   script:
     - sed -i '55s/GUROBI_DIRECT_SOLVER/SCIP_SOLVER/g' $CI_PROJECT_DIR/src/pycity_scheduling/solvers.py
     - sed -i '56s/GUROBI_DIRECT_SOLVER_OPTIONS/SCIP_SOLVER_OPTIONS/g' $CI_PROJECT_DIR/src/pycity_scheduling/solvers.py
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
-    - python3 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
+    - python3.7 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.7 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
   tags:
    - docker
 
@@ -103,8 +105,8 @@ unittest-scip-python38:
   script:
     - sed -i '55s/GUROBI_DIRECT_SOLVER/SCIP_SOLVER/g' $CI_PROJECT_DIR/src/pycity_scheduling/solvers.py
     - sed -i '56s/GUROBI_DIRECT_SOLVER_OPTIONS/SCIP_SOLVER_OPTIONS/g' $CI_PROJECT_DIR/src/pycity_scheduling/solvers.py
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
-    - python3 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
+    - python3.8 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.8 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
   tags:
    - docker
 
@@ -114,8 +116,8 @@ unittest-scip-python39:
   script:
     - sed -i '55s/GUROBI_DIRECT_SOLVER/SCIP_SOLVER/g' $CI_PROJECT_DIR/src/pycity_scheduling/solvers.py
     - sed -i '56s/GUROBI_DIRECT_SOLVER_OPTIONS/SCIP_SOLVER_OPTIONS/g' $CI_PROJECT_DIR/src/pycity_scheduling/solvers.py
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
-    - python3 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
+    - python3.9 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.9 -m unittest discover -s $CI_PROJECT_DIR/src/pycity_scheduling/testing/unit_tests -v
   tags:
    - docker
 
@@ -124,7 +126,7 @@ lint:
   image: ${DOCKER_IMAGE}:latest
   script:
     - mkdir -p lint
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.9 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
     - pylint --rcfile=$CI_PROJECT_DIR/gitlab-utils/.pylintrc pycity_scheduling > $CI_PROJECT_DIR/gitlab-utils/pylint_report.txt || true
     - tail -n 2 $CI_PROJECT_DIR/gitlab-utils/pylint_report.txt
     - mv $CI_PROJECT_DIR/gitlab-utils/pylint_report.txt lint
@@ -146,7 +148,7 @@ docs:
   script:
     - mkdir -p docs
     - rm -rf docs/*
-    - python3 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
+    - python3.9 -m pip install --no-cache-dir $CI_PROJECT_DIR/.
     - bash $CI_PROJECT_DIR/gitlab-utils/sphinx_doc/docu.sh
     - mv $CI_PROJECT_DIR/gitlab-utils/sphinx_doc/_build/html/* docs
   artifacts:
@@ -187,9 +189,9 @@ pypi-release:
     - mkdir -p release
     - mkdir -p $CI_PROJECT_DIR/_release
     - (cd $CI_PROJECT_DIR && cp -art _release/ setup.py README.md LICENSE.txt requirements.txt src)
-    - python3 $CI_PROJECT_DIR/_release/setup.py sdist -d $CI_PROJECT_DIR/_release/dist
-    - python3 $CI_PROJECT_DIR/_release/setup.py bdist_wheel -d $CI_PROJECT_DIR/_release/dist
-    - TWINE_PASSWORD=${CI_PYPI_TOKEN} TWINE_USERNAME=__token__ python3 -m twine upload $CI_PROJECT_DIR/_release/dist/*
+    - python3.9 $CI_PROJECT_DIR/_release/setup.py sdist -d $CI_PROJECT_DIR/_release/dist
+    - python3.9 $CI_PROJECT_DIR/_release/setup.py bdist_wheel -d $CI_PROJECT_DIR/_release/dist
+    - TWINE_PASSWORD=${CI_PYPI_TOKEN} TWINE_USERNAME=__token__ python3.9 -m twine upload $CI_PROJECT_DIR/_release/dist/*
     - mv $CI_PROJECT_DIR/_release/dist/* release
   artifacts:
     name: "pycity_scheduling-release-$CI_COMMIT_TAG"
