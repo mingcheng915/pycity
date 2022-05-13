@@ -48,7 +48,7 @@ GUROBI_PERSISTENT_SOLVER_OPTIONS = {'solve': {'options': {'OutputFlag': 0,
                                                           "Method": 1}}}
 
 SCIP_SOLVER = "scip"
-SCIP_SOLVER_OPTIONS = {'solve': {'options': {}}}
+SCIP_SOLVER_OPTIONS = {'solve': {'options': {'numerics/feastol': 1e-8}}}
 
 
 # Set the default mathematical programming solver to be used by the pycity_scheduling framework:

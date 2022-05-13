@@ -1724,4 +1724,4 @@ def solve_model(model):
         model.simple_var = pyomo.Var(domain=pyomo.Reals, bounds=(None, None), initialize=0)
         model.simple_constr = pyomo.Constraint(expr=model.simple_var == 1)
     opt = pyomo.SolverFactory(solvers.DEFAULT_SOLVER)
-    return opt.solve(model)
+    return opt.solve(model, **solvers.DEFAULT_SOLVER_OPTIONS.get("solve", {}))
