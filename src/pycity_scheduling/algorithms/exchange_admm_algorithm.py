@@ -170,7 +170,7 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
         # --------------------------
         # 2) incentive signal update
         # --------------------------
-        p_el_schedules = np.array([extract_pyomo_values(entity.model.p_el_vars, float) for entity in self.entities])
+        p_el_schedules = np.stack([entity.p_el_schedule for entity in self.entities], axis=0)
         x_ = (-p_el_schedules[0] + sum(p_el_schedules[1:])) / len(self.entities)
 
         u += x_

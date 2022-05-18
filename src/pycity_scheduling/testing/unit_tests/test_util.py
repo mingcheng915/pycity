@@ -29,6 +29,7 @@ import filecmp
 import os
 import os.path as op
 import pyomo.environ as pyomo
+import pytest
 
 import pycity_scheduling.util as util
 import pycity_scheduling.util.factory
@@ -320,6 +321,7 @@ class TestSubpackage(unittest.TestCase):
         m.v = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.v == 1.0)
         solve_model(m)
+        self.assertFalse(m.v.stale)
         e = util.extract_pyomo_values(m.v)
         self.assertEqual(1, e)
         self.assertIs(float, type(e))
@@ -330,11 +332,16 @@ class TestSubpackage(unittest.TestCase):
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Reals)
         solve_model(m)
 
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         m.v[1].value = 1
         m.v[2].value = 2
+        # setting the value now removes the stale flag
+        self.assertFalse(m.v[1].stale)
+        self.assertFalse(m.v[2].stale)
         e = util.extract_pyomo_values(m.v)
-        self.assertEqual(0, e[0])
-        self.assertEqual(0, e[1])
+        self.assertEqual(1, e[0])
+        self.assertEqual(2, e[1])
         self.assertEqual('f', e.dtype.kind)
 
         m = pyomo.ConcreteModel()
@@ -342,7 +349,20 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(4, 5))
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
+        self.assertEqual(4, e)
+
+        m = pyomo.ConcreteModel()
+        m.a = pyomo.Var(domain=pyomo.Reals)
+        m.c = pyomo.Constraint(expr=m.a == 1.0)
+        m.v = pyomo.Var(domain=pyomo.Integers, bounds=(4, 5))
+        m.c2 = pyomo.Constraint(expr=m.v == 4.0)
+        solve_model(m)
+        m.del_component("c2")
+        solve_model(m)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(4, e)
 
         m = pyomo.ConcreteModel()
@@ -351,7 +371,8 @@ class TestSubpackage(unittest.TestCase):
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(4.1, 4.3))
         solve_model(m)
         with self.assertRaises(SchedulingError):
-            util.extract_pyomo_values(m.v)
+            with pytest.warns(UserWarning):
+                util.extract_pyomo_values(m.v)
 
         m = pyomo.ConcreteModel()
         m.a = pyomo.Var(domain=pyomo.Reals)
@@ -359,14 +380,16 @@ class TestSubpackage(unittest.TestCase):
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Binary, bounds=(0.1, 0.9))
         solve_model(m)
         with self.assertRaises(SchedulingError):
-            util.extract_pyomo_values(m.v)
+            with pytest.warns(UserWarning):
+                util.extract_pyomo_values(m.v)
 
         m = pyomo.ConcreteModel()
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(3.9, 4.3))
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(4, e)
         self.assertIs(int, type(e))
 
@@ -375,7 +398,8 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers)
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(0, e)
         self.assertIs(int, type(e))
 
@@ -384,7 +408,8 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(None, -5))
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(-5, e)
         self.assertIs(int, type(e))
 
@@ -393,7 +418,8 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(-10, -2))
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(-2, e)
         self.assertIs(int, type(e))
 
@@ -402,7 +428,8 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(2, 10))
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(2, e)
         self.assertIs(int, type(e))
 
@@ -411,7 +438,8 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Binary)
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(0, e[0])
         self.assertEqual(0, e[1])
         self.assertEqual('b', e.dtype.kind)
@@ -421,7 +449,8 @@ class TestSubpackage(unittest.TestCase):
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(pyomo.RangeSet(1, 2), domain=pyomo.Binary, bounds=(1, None))
         solve_model(m)
-        e = util.extract_pyomo_values(m.v)
+        with pytest.warns(UserWarning):
+            e = util.extract_pyomo_values(m.v)
         self.assertEqual(1, e[0])
         self.assertEqual(1, e[1])
         self.assertEqual('b', e.dtype.kind)

@@ -84,15 +84,9 @@ class LocalOptimization(DistributedAlgorithm):
 
     def _solve(self, results, params, debug):
         self._solve_nodes(results, params, self.nodes[1:], variables=None, debug=debug)
-        for entity in self.entities[1:]:
-            entity.update_schedule()
         for t in range(len(self.nodes[0].model.cd_consumption)):
             self.nodes[0].model.cd_consumption[t] = sum(entity.p_el_schedule[t] for entity in self.entities[1:])
         self.nodes[0].full_update(params["robustness"])
-        self.nodes[0].solve(variables=None, debug=debug)
+        self.nodes[0].solve(debug=debug)
         self._save_time(results, params)
-        return
-
-    def _postsolve(self, results, params, debug):
-        self.entities[0].update_schedule()
         return

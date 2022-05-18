@@ -183,7 +183,7 @@ class OptimizationAlgorithm:
     def _postsolve(self, results, params, debug):
         """Step after optimization.
 
-        In this step the schedule can be updated and other post-processing can be done.
+        In this step other post-processing can be done.
 
         Parameters
         ----------
@@ -194,9 +194,7 @@ class OptimizationAlgorithm:
         debug : bool
             Specify whether detailed debug information shall be printed.
         """
-        for entity in self.entities:
-            entity.update_schedule()
-        return
+        pass
 
 
 class IterationAlgorithm(OptimizationAlgorithm):
@@ -280,18 +278,12 @@ class DistributedAlgorithm(OptimizationAlgorithm):
         node_times = {}
         for node, variables_ in zip(nodes, variables):
             start = time.monotonic()
-            node.solve(variables=variables_, debug=debug)
+            node.solve(debug=debug)
             stop = time.monotonic()
 
             entity_ids = tuple(entity.id for entity in node.entities)
             node_times[entity_ids] = stop - start
         results["distributed_times"].append(node_times)
-        return
-
-    def _postsolve(self, results, params, debug):
-        for node in self.nodes:
-            node.load_vars()
-        super()._postsolve(results, params, debug)
         return
 
 
@@ -385,29 +377,18 @@ class SolverNode:
             pass
         return
 
-    def solve(self, variables=None, debug=True):
+    def solve(self, debug=True):
         """Call the solver to solve this nodes optimization problem.
 
         Parameters
         ----------
-        variables : list of list of variables, optional
-            Can contain a list for each node in nodes to indicate to pyomo which
-            variables should be loaded back into the model. Specifying this can
-            lead to a significant speedup.
         debug : bool, optional
             Specify whether detailed debug information shall be printed. Defaults
             to true.
         """
         solve_options = self.solver_options.get("solve", {})
         if self.is_persistent:
-            if variables is None:
-                result = self.solver.solve(**solve_options)
-            else:
-                if "save_results" not in solve_options and "load_solutions" not in solve_options:
-                    solve_options = solve_options.copy()
-                    solve_options["save_results"] = False
-                    solve_options["load_solutions"] = False
-                result = self.solver.solve(**solve_options)
+            result = self.solver.solve(**solve_options)
         else:
             result = self.solver.solve(self.model, **solve_options)
         if result.solver.termination_condition != TerminationCondition.optimal or \
@@ -416,12 +397,6 @@ class SolverNode:
                 import pycity_scheduling.util.debug as debug
                 debug.analyze_model(self.model, self.solver, result)
             raise NonoptimalError("Could not retrieve schedule from model.")
-        if self.is_persistent and variables is not None:
-            self.solver.load_vars(variables)
-        return
-
-    def load_vars(self):
-        """Load all remaining variables that were not loaded at the last 'solve' call."""
-        if self.is_persistent:
-            self.solver.load_vars()
+        for entity in self.entities:
+            entity.update_schedule()
         return

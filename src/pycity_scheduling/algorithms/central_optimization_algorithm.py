@@ -79,6 +79,6 @@ class CentralOptimization(OptimizationAlgorithm):
         return results, params
 
     def _solve(self, results, params, debug):
-        self.node.solve(variables=None, debug=debug)
+        self.node.solve(debug=debug)
         self._save_time(results, params)
         return

@@ -294,7 +294,7 @@ class OptimizationEntity(object):
             self._var_funcs[name] = func
         for schedule in self.schedules.values():
             schedule[name] = np.full(self.timer.simu_horizon, 0, dtype=dtype)
-            self._var_order.append(name)
+        self._var_order.append(name)
         return
 
     def new_schedule(self, schedule):

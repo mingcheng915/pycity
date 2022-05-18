@@ -30,6 +30,7 @@ import warnings
 import pyomo.environ as pyomo
 from pyomo.opt import TerminationCondition
 from shapely.geometry import Point
+import pytest
 
 from pycity_scheduling import constants, solvers
 from pycity_scheduling.classes import *
@@ -133,7 +134,7 @@ class TestBattery(unittest.TestCase):
         obj = self.bat.get_objective(2)
         vs = list(pyomo.current.identify_variables(obj))
         for t in range(3):
-            self.assertIn(self.bat.model.p_el_vars[t], vs)
+            self.assertTrue(any(self.bat.model.p_el_vars[t] is v for v in vs))
             self.bat.model.p_el_vars[t] = t * 5
         self.assertEqual(3, len(vs))
         self.assertEqual(sum(2*(5*t)**2 for t in range(3)), pyomo.value(obj))
@@ -379,6 +380,8 @@ class TestChiller(unittest.TestCase):
         f, l = pyomo.current.decompose_term(c.body)
         self.assertTrue(f)
         for coeff, value in l:
+            if not np.isscalar(coeff):
+                coeff = coeff.value
             if value is self.ch.model.p_el_vars[0]:
                 self.assertEqual(11, coeff)
             if value is self.ch.model.p_th_cool_vars[0]:
@@ -826,6 +829,7 @@ class TestDeferrableLoad(unittest.TestCase):
         model = pyomo.ConcreteModel()
         dl.populate_model(model)
         obj = pyomo.sum_product(dl.model.p_el_vars, dl.model.p_el_vars)
+        obj -= 0.01*dl.model.p_el_vars[1]
         model.o = pyomo.Objective(expr=obj)
         dl.update_model()
         solve_model(model)
@@ -847,7 +851,7 @@ class TestDeferrableLoad(unittest.TestCase):
         return
 
     def test_infeasible_consumption(self):
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             feasible = DeferrableLoad(self.e, 10, 10, load_time=self.lt)
         m = pyomo.ConcreteModel()
         feasible.populate_model(m)
@@ -858,7 +862,7 @@ class TestDeferrableLoad(unittest.TestCase):
         self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
 
         m = pyomo.ConcreteModel()
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             infeasible = DeferrableLoad(self.e, 10, 10.6, load_time=self.lt)
         infeasible.populate_model(m)
         infeasible.update_model()
@@ -873,14 +877,14 @@ class TestDeferrableLoad(unittest.TestCase):
         return
 
     def test_update_model_integer(self):
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl = DeferrableLoad(self.e, 19, 9.5, load_time=self.lt)
         m = pyomo.ConcreteModel()
         dl.populate_model(m, mode="integer")
 
         obj = pyomo.sum_product([0] * 2 + [1] * 2 + [0] * 2, dl.model.p_el_vars, dl.model.p_el_vars)
         m.o = pyomo.Objective(expr=obj)
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl.update_model(mode="integer")
         results = solve_model(m)
         self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
@@ -890,7 +894,7 @@ class TestDeferrableLoad(unittest.TestCase):
         for t in range(3):
             dl.timer.mpc_update()
             if t == 0:
-                with self.assertWarns(UserWarning):
+                with pytest.warns(UserWarning):
                     dl.update_model(mode="integer")
             else:
                 dl.update_model(mode="integer")
@@ -904,21 +908,13 @@ class TestDeferrableLoad(unittest.TestCase):
     def test_infeasible_integer(self):
         e = get_env(1, 9)
         model = pyomo.ConcreteModel()
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl = DeferrableLoad(e, 19, 9.5, load_time=self.lt)
             dl.populate_model(model, mode="integer")
             dl.update_model(mode="integer")
-        obj = pyomo.sum_product(dl.model.p_el_vars)
-        model.o = pyomo.Objective(expr=obj)
-        logger = logging.getLogger("pyomo.core")
-        oldlevel = logger.level
-        logger.setLevel(logging.ERROR)
-        results = solve_model(model)
-        logger.setLevel(oldlevel)
-        self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
         model = pyomo.ConcreteModel()
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl = DeferrableLoad(self.e, 19, 19, load_time=self.lt)
             dl.populate_model(model, mode="integer")
             dl.update_model(mode="integer")
@@ -932,7 +928,7 @@ class TestDeferrableLoad(unittest.TestCase):
         self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
 
         model = pyomo.ConcreteModel()
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl = DeferrableLoad(self.e, 19, 19*3/4, load_time=self.lt)
             dl.populate_model(model, mode="integer")
             dl.update_model(mode="integer")
@@ -945,7 +941,7 @@ class TestDeferrableLoad(unittest.TestCase):
         return
 
     def test_objective(self):
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl = DeferrableLoad(self.e, 19, 19, load_time=self.lt)
         model = pyomo.ConcreteModel()
         dl.populate_model(model)
@@ -1097,7 +1093,7 @@ class TestElectricalEntity(unittest.TestCase):
         ratio = peak_to_average_ratio(self.ee)
         self.assertEqual(20/5, ratio)
         self.ee.load_schedule("ref")
-        with self.assertWarns(RuntimeWarning):
+        with pytest.warns(RuntimeWarning):
             ratio = peak_to_average_ratio(self.ee)
         self.assertEqual(np.inf, ratio)
         return
@@ -1349,11 +1345,11 @@ class TestElectricVehicle(unittest.TestCase):
             warnings.simplefilter("always", UserWarning)
             self.ev = ElectricalVehicle(e, 10, 8, soc_init=0.5, charging_time=[1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0])
             self.assertEqual(0, len(w))
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             self.ev = ElectricalVehicle(e, 10, 8, soc_init=0.5, charging_time=[1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0])
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             self.ev = ElectricalVehicle(e, 10, 8, soc_init=0.5, charging_time=[1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0])
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             self.ev = ElectricalVehicle(e, 10, 8, soc_init=0.5, charging_time=[1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1])
         return
 
@@ -1396,6 +1392,8 @@ class TestHeatPump(unittest.TestCase):
         f, l = pyomo.current.decompose_term(c.body)
         self.assertTrue(f)
         for coeff, value in l:
+            if not np.isscalar(coeff):
+                coeff = coeff.value
             if value is self.hp.model.p_el_vars[0]:
                 self.assertEqual(11, coeff)
             if value is self.hp.model.p_th_heat_vars[0]:
@@ -1472,7 +1470,7 @@ class TestPrices(unittest.TestCase):
     def test_unavailable_year(self):
         ti = Timer(op_horizon=4, mpc_horizon=8, step_size=3600,
                    initial_date=(9999, 1, 1), initial_time=(1, 0, 0))
-        with self.assertWarnsRegex(UserWarning, "9999"):
+        with pytest.warns(UserWarning, match=r'9999'):
             Prices(ti)
         return
 

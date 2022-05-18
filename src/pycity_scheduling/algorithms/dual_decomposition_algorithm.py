@@ -133,12 +133,12 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
             for t in range(op_horizon):
                 node.model.lambdas[t] = lambdas[t]
             node.obj_update()
-            node.solve(variables=[entity.model.p_el_vars[t] for t in range(op_horizon)], debug=debug)
+            node.solve(debug=debug)
 
         # --------------------------
         # 2) incentive signal update
         # --------------------------
-        p_el_schedules = np.array([extract_pyomo_values(entity.model.p_el_vars, float) for entity in self.entities])
+        p_el_schedules = np.stack([entity.p_el_schedule for entity in self.entities], axis=0)
         lambdas -= self.rho * p_el_schedules[0]
         lambdas += self.rho * np.sum(p_el_schedules[1:], axis=0)
 

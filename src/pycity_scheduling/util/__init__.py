@@ -21,6 +21,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER I
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import warnings
 
 import numpy as np
 import pyomo.environ as pyomo
@@ -191,8 +192,14 @@ def extract_pyomo_value(variable, var_type=None):
         raise ValueError("For indexed variables 'extract_pyomo_values' should be used.")
 
     if variable.stale is True:
-        # if stale select closest feasible value to zero
-        value = 0
+        warnings.warn("Found stale variable from optimizer. Make sure that the variable is in active constraints and"
+                      "that it is extracted before a new model is optimized. Otherwise, it can not be guaranteed, that"
+                      "the value adheres to all constraints.")
+        # if stale select closest feasible value to zero/variable value
+        if variable.value is not None:
+            value = variable.value
+        else:
+            value = 0
         if variable.ub is not None and variable.ub < 0:
             value = variable.ub
         elif variable.lb is not None and variable.lb > 0:
