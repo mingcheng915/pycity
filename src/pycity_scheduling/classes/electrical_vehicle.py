@@ -114,12 +114,12 @@ class ElectricalVehicle(Battery):
         # Contains all length of charging periods in timesteps.
         self.charging_durations = self.stopping_timesteps - self.starting_timesteps
         # Links charging periods to indices in previous arrays.
-        self.charging_indices = np.zeros_like(charging_time, dtype=np.int)
+        self.charging_indices = np.zeros_like(charging_time, dtype=int)
         for i, start in enumerate(self.starting_timesteps):
             self.charging_indices[start:start + self.charging_durations[i]] = np.full(self.charging_durations[i], i)
 
         # Contains the amount of energy to charge in charging periods.
-        self.required_charges = np.full_like(self.charging_durations, 0.8 * e_el_max, dtype=np.float)
+        self.required_charges = np.full_like(self.charging_durations, 0.8 * e_el_max, dtype=np.float64)
 
         if len(self.charging_time) > 0:
             # In first charging cycle the required charge is determined by soc_init and is not necessarily 80%.

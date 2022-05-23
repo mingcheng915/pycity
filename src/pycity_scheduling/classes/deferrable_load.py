@@ -109,7 +109,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
                 .format(self._long_id)
             )
 
-        self.new_var("p_start", dtype=np.bool, func=self._get_start)
+        self.new_var("p_start", dtype=bool, func=self._get_start)
 
         self.runtime = int(round(self.e_consumption / (self.p_el_nom * self.time_slot)))
 
@@ -124,7 +124,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         cumsum = np.zeros((self.op_horizon+1))
         np.cumsum(self.schedule["p_el"][self.op_slice], out=cumsum[1:])
         runtime_consumptions = cumsum[self.runtime:] - cumsum[:-self.runtime]
-        starts = np.zeros(self.op_horizon, dtype=np.bool)
+        starts = np.zeros(self.op_horizon, dtype=bool)
         starts[np.argmax(runtime_consumptions)] = True
         return starts
 

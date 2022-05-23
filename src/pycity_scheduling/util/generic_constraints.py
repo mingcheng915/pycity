@@ -95,7 +95,7 @@ class LowerActivationLimit(Constraint):
         self.var_nom = var_nom
         self.var_name = var_name
         self.lower_activation_limit = lower_activation_limit
-        o.new_var(var_name+"_state", dtype=np.bool, func=lambda model:
+        o.new_var(var_name+"_state", dtype=bool, func=lambda model:
                   abs(o.schedule[self.var_name][o.op_slice]) > abs(0.01 * var_nom))
 
     def apply(self, m, mode=""):

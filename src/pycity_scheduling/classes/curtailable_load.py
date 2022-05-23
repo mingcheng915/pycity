@@ -87,7 +87,7 @@ class CurtailableLoad(ElectricalEntity, ed.ElectricalDemand):
         self.max_low = max_low
         self.min_full = min_full
         self.p_el_curt = self.p_el_nom * self.max_curt
-        self.new_var("p_state", dtype=np.bool, func=lambda model:
+        self.new_var("p_state", dtype=bool, func=lambda model:
                      self.schedule["p_el"][self.op_slice] > 0.99*p_el_nom)
 
     def populate_model(self, model, mode="convex"):

@@ -105,7 +105,7 @@ class Battery(ElectricalEntity, bat.Battery):
 
         self.new_var("p_el_demand")
         self.new_var("p_el_supply")
-        self.new_var("p_state", dtype=np.bool, func=lambda model:
+        self.new_var("p_state", dtype=bool, func=lambda model:
                      self.schedule["p_el_demand"][self.op_slice] >
                      self.schedule["p_el_supply"][self.op_slice]
                      )
