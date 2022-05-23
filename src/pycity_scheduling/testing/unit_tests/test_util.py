@@ -24,6 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 import numpy as np
 import unittest
+import logging
 import tempfile
 import filecmp
 import os
@@ -369,6 +370,11 @@ class TestSubpackage(unittest.TestCase):
         m.a = pyomo.Var(domain=pyomo.Reals)
         m.c = pyomo.Constraint(expr=m.a == 1.0)
         m.v = pyomo.Var(domain=pyomo.Integers, bounds=(4.1, 4.3))
+
+        logger = logging.getLogger("pyomo.core")
+        oldlevel = logger.level
+        logger.setLevel(logging.ERROR)
+
         solve_model(m)
         with self.assertRaises(SchedulingError):
             with pytest.warns(UserWarning):
@@ -382,6 +388,8 @@ class TestSubpackage(unittest.TestCase):
         with self.assertRaises(SchedulingError):
             with pytest.warns(UserWarning):
                 util.extract_pyomo_values(m.v)
+
+        logger.setLevel(oldlevel)
 
         m = pyomo.ConcreteModel()
         m.a = pyomo.Var(domain=pyomo.Reals)

@@ -37,9 +37,7 @@ def main(do_plot=False):
     print("\n\n------ Example 06: Algorithm Warmstart ------\n\n")
 
     # Unfortunately, algorithm warmstart capabilities are supported by the Gurobi/CPLEX solvers only:
-    if not (DEFAULT_SOLVER is "gurobi_direct" or
-            DEFAULT_SOLVER is "gurobi_persistent" or
-            DEFAULT_SOLVER is "cplex"):
+    if DEFAULT_SOLVER not in ["gurobi_direct", "gurobi_persistent", "cplex"]:
         print("Algorithm warmstart capability supported by the Gurobi/CPLEX solvers only! Example is not executed.")
         return
 

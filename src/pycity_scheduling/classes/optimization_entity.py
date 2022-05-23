@@ -357,7 +357,7 @@ class OptimizationEntity(object):
             e.load_schedule(schedule)
         return
 
-    def load_schedule_into_model(self, schedule=None):
+    def load_schedule_into_model(self, schedule=None, nudge=True):
         """
         Overwrites the values in the entity model with the values in the schedule.
 
@@ -379,7 +379,13 @@ class OptimizationEntity(object):
             vars = getattr(self.model, var_name + "_vars")
             for t in range(self.op_horizon):
                 if t in vars:
-                    vars[t].value = var_schedule[t]
+                    value = var_schedule[t]
+                    if nudge:
+                        if vars[t].lb is not None and value < vars[t].lb and np.isclose(vars[t].lb, value):
+                            value = vars[t].lb
+                        elif vars[t].ub is not None and value > vars[t].ub and np.isclose(vars[t].ub, value):
+                            value = vars[t].ub
+                    vars[t].value = value
 
         for e in self.get_lower_entities():
             e.load_schedule_into_model(schedule)

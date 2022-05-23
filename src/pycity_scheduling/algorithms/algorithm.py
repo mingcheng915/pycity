@@ -346,8 +346,10 @@ class SolverNode:
         """Add a single entity to a model."""
         if isinstance(entity, Building):
             entity.populate_model(model, self.mode, robustness=robustness)
+            entity.update_model(self.mode, robustness=robustness)
         else:
             entity.populate_model(model, self.mode)
+            entity.update_model(self.mode)
         return
 
     def full_update(self, robustness=None):
