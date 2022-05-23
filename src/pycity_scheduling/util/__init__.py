@@ -200,9 +200,9 @@ def extract_pyomo_value(variable, var_type=None):
             value = variable.value
         else:
             value = 0
-        if variable.ub is not None and variable.ub < 0:
+        if variable.ub is not None and variable.ub < value:
             value = variable.ub
-        elif variable.lb is not None and variable.lb > 0:
+        elif variable.lb is not None and variable.lb > value:
             value = variable.lb
 
         if var_type is int:

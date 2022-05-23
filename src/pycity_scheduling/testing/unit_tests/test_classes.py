@@ -824,12 +824,11 @@ class TestDeferrableLoad(unittest.TestCase):
         return
 
     def test_update_model(self):
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             dl = DeferrableLoad(self.e, 19, 10, load_time=self.lt)
         model = pyomo.ConcreteModel()
         dl.populate_model(model)
         obj = pyomo.sum_product(dl.model.p_el_vars, dl.model.p_el_vars)
-        obj -= 0.01*dl.model.p_el_vars[1]
         model.o = pyomo.Objective(expr=obj)
         dl.update_model()
         solve_model(model)
@@ -849,6 +848,126 @@ class TestDeferrableLoad(unittest.TestCase):
         assert_equal_array(dl.p_el_schedule[:7], [0, 8, 8, 8, 0, 8, 8])
         assert_equal_array(dl.p_start_schedule[:7], [False, True, False, False, False, False, False])
         return
+
+    def test_large_runtime(self):
+        self.e = get_env(9, 9)
+        self.lt = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        dl= DeferrableLoad(self.e, 10, 90/4, load_time=self.lt)
+        m = pyomo.ConcreteModel()
+        dl.populate_model(m)
+        dl.update_model()
+        obj = pyomo.sum_product(dl.model.p_el_vars)
+        m.o = pyomo.Objective(expr=obj)
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+
+        dl.update_schedule()
+        assert_equal_array(dl.p_el_schedule, np.full_like(dl.p_el_schedule, 10))
+        assert_equal_array(dl.p_start_schedule, [True, False, False, False, False, False, False, False, False])
+
+        self.e = get_env(9, 9)
+        self.lt = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        dl = DeferrableLoad(self.e, 10, 90/4, load_time=self.lt)
+        m = pyomo.ConcreteModel()
+        dl.populate_model(m, mode="integer")
+        dl.update_model()
+        obj = pyomo.sum_product(dl.model.p_el_vars)
+        m.o = pyomo.Objective(expr=obj)
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+
+        dl.update_schedule()
+        assert_equal_array(dl.p_el_schedule, np.full_like(dl.p_el_schedule, 10))
+        assert_equal_array(dl.p_start_schedule, [True, False, False, False, False, False, False, False, False])
+        return
+
+    def test_small_runtime(self):
+        self.e = get_env(9, 9)
+        self.lt = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        dl= DeferrableLoad(self.e, 10, 10/4, load_time=self.lt)
+        m = pyomo.ConcreteModel()
+        dl.populate_model(m)
+        dl.update_model()
+        obj = pyomo.sum_product(dl.model.p_el_vars, dl.model.p_el_vars)
+        m.o = pyomo.Objective(expr=obj)
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+
+        dl.update_schedule()
+        assert_equal_array(dl.p_el_schedule, np.full_like(dl.p_el_schedule, 10/9))
+        assert_equal_array(dl.p_start_schedule, [True, False, False, False, False, False, False, False, False])
+
+        self.e = get_env(9, 9)
+        self.lt = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        dl = DeferrableLoad(self.e, 10, 10/4, load_time=self.lt)
+        m = pyomo.ConcreteModel()
+        dl.populate_model(m, mode="integer")
+        dl.update_model()
+        obj = pyomo.sum_product(dl.model.p_el_vars, dl.model.p_el_vars)
+        m.o = pyomo.Objective(expr=obj)
+        results = solve_model(m)
+        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+
+        dl.update_schedule()
+        values, counts = np.unique(dl.p_el_schedule, return_counts=True)
+        assert_equal_array(values, [0, 10])
+        assert_equal_array(counts, [8, 1])
+        assert_equal_array(dl.p_start_schedule, [True, False, False, False, False, False, False, False, False])
+        return
+
+    def test_zero_runtime(self):
+        self.e = get_env(9, 9)
+        self.lt = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        with self.assertRaises(ValueError):
+            dl= DeferrableLoad(self.e, 10, 1, load_time=self.lt)
+        return
+
+    def test_small_horizon(self):
+        e = get_env(1, 9)
+        lt = [1, 1, 1, 1, 1, 1, 1, 1, 0]
+        with pytest.warns(UserWarning):
+            dl = DeferrableLoad(e, 10, 10 / 4, lt)
+
+        for mode in ["integer", "convex"]:
+            with self.subTest("mode: {}".format(mode)):
+                e.timer.reset()
+                dl.reset()
+
+                m = pyomo.ConcreteModel()
+
+                dl.populate_model(m, mode=mode)
+
+                obj = pyomo.sum_product(dl.model.p_el_vars)
+                m.o = pyomo.Objective(expr=obj)
+
+                schedule = np.zeros(9)
+                logger = logging.getLogger("pyomo.core")
+                oldlevel = logger.level
+                logger.setLevel(logging.ERROR)
+                for t in range(9):
+                    if t < 7 and mode == "integer":
+                        with pytest.warns(UserWarning):
+                            dl.update_model(mode=mode)
+                    else:
+                        dl.update_model(mode=mode)
+
+                    results = solve_model(m)
+
+                    if t == 8:
+                        self.assertEqual(results.solver.termination_condition, TerminationCondition.infeasible)
+                        with pytest.warns(UserWarning, match="stale variable"):
+                            dl.update_schedule()
+                    else:
+                        schedule[t] = 10
+                        self.assertEqual(results.solver.termination_condition, TerminationCondition.optimal)
+                        dl.update_schedule()
+
+                        assert_equal_array(dl.p_el_schedule, schedule)
+
+                        dl.timer.mpc_update()
+
+                logger.setLevel(oldlevel)
+                return
 
     def test_infeasible_consumption(self):
         with pytest.warns(UserWarning):
@@ -908,8 +1027,9 @@ class TestDeferrableLoad(unittest.TestCase):
     def test_infeasible_integer(self):
         e = get_env(1, 9)
         model = pyomo.ConcreteModel()
-        with pytest.warns(UserWarning):
-            dl = DeferrableLoad(e, 19, 9.5, load_time=self.lt)
+        with pytest.raises(ValueError):
+            with pytest.warns(UserWarning):
+                dl = DeferrableLoad(e, 19, 9.5, load_time=self.lt)
             dl.populate_model(model, mode="integer")
             dl.update_model(mode="integer")
 

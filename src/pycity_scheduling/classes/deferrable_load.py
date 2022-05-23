@@ -113,8 +113,16 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
 
         self.runtime = int(round(self.e_consumption / (self.p_el_nom * self.time_slot)))
 
+        if self.runtime == 0:
+            raise ValueError(
+                ("The DeferrableLoad {} has a runtime of zero timesteps, which leads to infeasible constraints. "
+                 "Consider removing it.")
+                .format(self._long_id)
+            )
+
     def _get_start(self, model):
-        cumsum = np.cumsum(self.schedule["p_el"][self.op_slice])
+        cumsum = np.zeros((self.op_horizon+1))
+        np.cumsum(self.schedule["p_el"][self.op_slice], out=cumsum[1:])
         runtime_consumptions = cumsum[self.runtime:] - cumsum[:-self.runtime]
         starts = np.zeros(self.op_horizon, dtype=np.bool)
         starts[np.argmax(runtime_consumptions)] = True
@@ -166,7 +174,7 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
             self.runtime = rounded_runtime
 
             if self.runtime > self.op_horizon:
-                warn(
+                raise ValueError(
                     ("DeferrableLoad {} is not able to complete its operation in the given op_horizon, " +
                      "which will render the model infeasible.")
                     .format(self._long_id)
