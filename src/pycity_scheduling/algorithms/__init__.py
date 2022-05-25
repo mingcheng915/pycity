@@ -27,6 +27,7 @@ from .local_optimization_algorithm import LocalOptimization
 from .exchange_admm_algorithm import ExchangeADMM
 from .central_optimization_algorithm import CentralOptimization
 from .dual_decomposition_algorithm import DualDecomposition
+from .exchange_miqp_admm_algorithm import ExchangeMIQPADMM
 
 
 __all__ = [
@@ -35,8 +36,10 @@ __all__ = [
     'ExchangeADMM',
     'CentralOptimization',
     'DualDecomposition',
+    'ExchangeMIQPADMM',
     'algorithm',
     'algorithms',
+
 ]
 
 
@@ -46,4 +49,5 @@ algorithms = {
     'exchange-admm': ExchangeADMM,
     'central': CentralOptimization,
     'dual-decomposition': DualDecomposition,
+    'exchange-miqp-admm': ExchangeMIQPADMM,
 }

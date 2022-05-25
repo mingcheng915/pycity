@@ -111,7 +111,9 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
         results["lambdas"] = []
         return results, params
 
-    def _is_last_iteration(self, results, params):
+    def _is_last_iteration(self, results, params, debug):
+        if super(DualDecomposition, self)._is_last_iteration(results, params, debug):
+            return True
         return results["r_norms"][-1] <= self.eps_primal
 
     def _iteration(self, results, params, debug):
