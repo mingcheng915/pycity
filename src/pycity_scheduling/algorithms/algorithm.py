@@ -230,6 +230,8 @@ class IterationAlgorithm(OptimizationAlgorithm):
         """Returns True if the current iteration is the last one.
             It checks if the iteration limit is exceeded.
             Overwrite this function to apply additional, individual stopping criteria other than the iteration limit.
+            Anyway, this parent method must be called in a child method, so that the check of an exceeded iteration
+            limit below is executed.
 
         Parameters
         ----------

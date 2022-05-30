@@ -7,9 +7,7 @@ import pyomo.environ as pyomo
 from pycity_scheduling.classes import (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
 from pycity_scheduling.util import extract_pyomo_values
 from pycity_scheduling.algorithms.algorithm import IterationAlgorithm, DistributedAlgorithm, SolverNode
-from pycity_scheduling.classes import HeatPump, ElectricalHeater, Battery
 from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
-import matplotlib.pyplot as plt
 
 
 # class creates a data structure for the pyomo variables and parameters
@@ -209,8 +207,9 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         self.x_k, self.u_var, self.u_constr, self.v_k = self._set_parameters()
         self._add_objective()
 
-    # Function that gets the decision variables of each subsystem from the model
+    # Function that gets the binary state variables of each subsystem from the model
     # It also changes the domain of the binary variables to real variables, since they are rounded on binaries later
+    # The data structure in which the variables are stored is shown graphically in "data_structure.pdf"
     def _get_variables(self):
         variable_list = np.empty(shape=0)
         for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
@@ -225,8 +224,9 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
 
         return variable_list
 
-    # Function that gets the decision variables of each subsystem from the model
-    # It sorts them after equalites and inequalities and writes them in the form Ax = b and Cx >= d
+    # Function that gets the constraints of each subsystem from the model
+    # It sorts them after equality and inequality constraints and writes them in the form Ax-b = 0 or Cx-d >= 0
+    # The data structure in which the constraints are stored is shown graphically in "data_structure.pdf"
     def _get_constraints(self):
         # List that contains the dictionaries that store the specified constr_lists of each node
         constraint_list = np.empty(shape=0)
@@ -237,15 +237,17 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
             if i != 0:
                 for en in entity.get_all_entities():
                     for constraint in en.model.component_objects(pyomo.Constraint):
+                        # deactivate constraints in unconstrained mode, since they are considered by an augmented term
                         if self.x_update_mode == 'unconstrained':
-                            # deactivate constraint, since they are considered by an augmented term
                             constraint.deactivate()
                         for index in constraint:
-
+                            # check if the constraint is an equality constraint and write it in the form Ax-b=0
                             if pyomo.value(constraint[index].lower) == pyomo.value(constraint[index].upper):
                                 expr = constraint[index].body - constraint[index].lower
                                 equality_constr_list.append(expr, index)
 
+                            # if the constraint is not an equality constraint it has to be an inequality constraint
+                            # the next three checks are about to write that constraint in the form Cx-d >= 0
                             elif pyomo.value(constraint[index].upper) is None:
                                 expr = constraint[index].body - constraint[index].lower
                                 inequality_constr_list.append(expr, index)
@@ -267,11 +269,15 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         return constraint_list
 
     # Function that sets the pyomo parameters for the dual variables for each subsystem
+    # The parameters are stored with the same data structure as the constraints and variables
     def _set_parameters(self):
-        # x_real and x_binaries
+        # x_k to save the solution of x for next iteration
         x_k_param = np.empty(shape=0)
+        # dual parameter for the binary variables
         u_var_param = np.empty(shape=0)
+        # dual parameter for the constraints
         u_constr_param = np.empty(shape=0)
+        # dual parameter for the ADMM method for inequality constrained optimization
         v_k_param = np.empty(shape=0)
         for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
             node_dict = {}
@@ -349,7 +355,6 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
                 # although it belongs to the mathematical formulation of the algorithm. Therefore, it is only used in
                 # constrained mode
                 if self.x_update_mode == 'constrained':
-                    # x_bin entries
                     for t in range(entity.op_horizon):
                         a = self.variable_list[i].get_list(t)
                         b = self.x_k[i].get_list(t)
@@ -358,7 +363,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
                         obj += node.model.rho / 2 * expr
 
                 if self.x_update_mode == 'unconstrained':
-                    # constraint entries
+                    # constraint entries of the augmented term
                     for t in range(entity.op_horizon + 1):
                         a = self.constraint_list[i]["equality_constr"].get_list(t)
                         b = self.u_constr[i]["equality_constr"].get_list(t)
@@ -372,7 +377,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
             node.model.o = pyomo.Objective(expr=obj)
         return
 
-    # returns the average of the primal residual of subsystem i. Later the deviation of the old to the new x is added
+    # returns the average of the primal residual of subsystem i
     def primal_residual(self):
         primal_list = []
         for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
@@ -400,7 +405,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
             for t in range(entity.op_horizon):
                 x_old = self.variable_list[i].get_list_values(t)
                 x_new = x_old + self.u_var[i].get_list_values(t)
-                # only round the binary variables if the warm start process is in the integer phase
+                # round the binary variables on 0 or 1
                 if self.mode == "integer":
                     for j in range(len(x_new)):
                         if abs(x_new[j]) >= 0.5:
@@ -573,12 +578,12 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         # ------------------------------------------
         # 3) Calculate parameters for stopping criteria
         # ------------------------------------------
-        # results["r_norms"].append(np.math.sqrt(len(self.entities)) * np.linalg.norm(x_))
         results["r_norms"].append(np.linalg.norm(x_))
 
         s = np.zeros_like(p_el_schedules)
-        s[0] = - node.model.rho.value * (-p_el_schedules[0] + params["p_el"][0] + params["x_"] - x_)
-        for i in range(1, len(self.entities)):
+        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+            if i == 0:
+                s[i] = - node.model.rho.value * (-p_el_schedules[0] + params["p_el"][0] + params["x_"] - x_)
             s[i] = - node.model.rho.value * (p_el_schedules[i] - params["p_el"][i] + params["x_"] - x_)
         results["s_norms"].append(np.linalg.norm(s.flatten()))
 
