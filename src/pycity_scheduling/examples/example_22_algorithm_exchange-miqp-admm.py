@@ -28,7 +28,10 @@ from pycity_scheduling.classes import *
 from pycity_scheduling.algorithms import *
 
 
-# This is a very simple power scheduling example using the distributed Exchange ADMM algorithm.
+# This is a very simple power scheduling example using the distributed Exchange MIQP ADMM algorithm.
+# It compares the differences of the schedules and the performance of the Exchange MIQP ADMM algorithm in the
+# 'unconstrained' and 'constrained' x_update_mode. It also compares the solution of the algorithm in both
+# x_update_modes with the solution of the Central Optimization algorithm.
 
 
 def main(do_plot=False):
@@ -127,8 +130,8 @@ def main(do_plot=False):
     print(list(cd.p_el_schedule))
 
     # Perform the scheduling with the Exchange MIQP ADMM algorithm and a unconstrained x_update
-    opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.01,
-                           eps_dual=0.01, eps_primal_i=0.01, eps_dual_i=0.01)
+    opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
+                           eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
     results = opt.solve()
     cd.copy_schedule("exchange_miqp_admm")
 
@@ -157,8 +160,8 @@ def main(do_plot=False):
 # Therefore, the solver only has to minimize an polynomial objective function as x-update. This example shows that
 # the solution of the Exchange MIQP ADMM algorithm is almost identical in both the constrained and the unconstrained
 # mode but the algorithm needs more iterations in the unconstrained mode.
-# Anyway, both scheduling results are close to the ones of the central algorithm, which demonstrates the correctness
-# of the distributed algorithm.
+# Anyway, both scheduling results are close to the ones of the Central Optimization algorithm, which demonstrates
+# the correctness of the distributed algorithm.
 
 
 if __name__ == '__main__':

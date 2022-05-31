@@ -248,9 +248,7 @@ class IterationAlgorithm(OptimizationAlgorithm):
         if results["iterations"][-1] > self.max_iterations:
             if debug:
                 print(
-                    "Exceeded iteration limit of {0} iterations. "
-                    "Norms are ||r|| =  {1}, ||s|| = {2}."
-                        .format(self.max_iterations, results["r_norms"][-1], results["s_norms"][-1])
+                    "Exceeded iteration limit of {0} iterations.".format(self.max_iterations)
                 )
             warnings.warn("User defined iteration limit exceeded")
             return True

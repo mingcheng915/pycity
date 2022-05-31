@@ -102,10 +102,6 @@ class TestAlgorithms(unittest.TestCase):
         self.bd1.model.p_el_vars[0].setub(15.0)
         with self.assertRaises(NonoptimalError):
             f.solve(full_update=True, debug=False)
-        f2 = algorithms['exchange-admm'](self.cd, rho=2, eps_primal=0.001, max_iterations=2)
-        with self.assertRaises(MaxIterationError):
-            f2.solve()
-
         return
 
     def test_exchange_admm_beta(self):
@@ -159,8 +155,8 @@ class TestAlgorithms(unittest.TestCase):
         return
 
     def test_exchange_miqp_admm(self):
-        f = algorithms['exchange-miqp-admm'](self.cd, rho=2.0, eps_primal=0.001, eps_primal_i=0.001,
-                                             x_update_mode='constrained')
+        f = algorithms['exchange-miqp-admm'](self.cd, rho=2.0, eps_primal=0.001, eps_dual=0.01,
+                                             eps_primal_i=0.001, eps_dual_i=0.01, x_update_mode='constrained')
         r = f.solve()
 
         self.assertAlmostEqual(20, self.bd1.p_el_schedule[0], 4)
@@ -169,20 +165,31 @@ class TestAlgorithms(unittest.TestCase):
         self.assertAlmostEqual(40, self.bd2.p_el_schedule[1], 4)
         self.assertAlmostEqual(60, self.cd.p_el_schedule[0], 2)
         self.assertAlmostEqual(60, self.cd.p_el_schedule[1], 2)
-        self.assertTrue(r["r_norms"][-2] > 0.001 or r["s_norms"][-2] > 0.1)
+        self.assertTrue(r["r_norms"][-2] > 0.001 or r["s_norms"][-2] > 0.01 or r["r_sub_ave"][-2] > 0.001
+                        or r["s_sub_ave"][-2] > 0.01)
         self.assertGreater(0.001, r["r_norms"][-1])
         self.assertGreater(1, r["s_norms"][-1])
 
-        """
         # Test infeasible model:
         self.bd1.model.new_constr = pyomo.Constraint(expr=self.bd1.model.p_el_vars[0] == 0)
         self.bd1.model.p_el_vars[0].setub(15.0)
         with self.assertRaises(NonoptimalError):
             f.solve(full_update=True, debug=False)
-        f2 = algorithms['exchange-admm'](self.cd, rho=2, eps_primal=0.001, max_iterations=2)
-        with self.assertRaises(MaxIterationError):
-            f2.solve()
-        """
+
+        f2 = algorithms['exchange-miqp-admm'](self.cd, rho=2.0, eps_primal=0.001, eps_dual=0.01,
+                                              eps_primal_i=0.001, eps_dual_i=0.01, x_update_mode='unconstrained')
+        r = f2.solve()
+
+        self.assertAlmostEqual(20, self.bd1.p_el_schedule[0], 1)
+        self.assertAlmostEqual(20, self.bd1.p_el_schedule[1], 1)
+        self.assertAlmostEqual(40, self.bd2.p_el_schedule[0], 1)
+        self.assertAlmostEqual(40, self.bd2.p_el_schedule[1], 1)
+        self.assertAlmostEqual(60, self.cd.p_el_schedule[0], 1)
+        self.assertAlmostEqual(60, self.cd.p_el_schedule[1], 1)
+        self.assertTrue(r["r_norms"][-2] > 0.001 or r["s_norms"][-2] > 0.01 or r["r_sub_ave"][-2] > 0.001
+                        or r["s_sub_ave"][-2] > 0.01)
+        self.assertGreater(0.001, r["r_norms"][-1])
+        self.assertGreater(1, r["s_norms"][-1])
         return
 
     def test_dual_decomposition(self):

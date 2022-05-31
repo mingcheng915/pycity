@@ -1,179 +1,85 @@
-# Class for the Exchange MIQP ADMM algorithm
+"""
+The pycity_scheduling framework
+
+
+Copyright (C) 2022,
+Institute for Automation of Complex Power Systems (ACS),
+E.ON Energy Research Center (E.ON ERC),
+RWTH Aachen University
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 
 import numpy as np
 import pyomo.core as pyo_core
 import pyomo.kernel as pmo
 import pyomo.environ as pyomo
+
 from pycity_scheduling.classes import (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
 from pycity_scheduling.util import extract_pyomo_values
 from pycity_scheduling.algorithms.algorithm import IterationAlgorithm, DistributedAlgorithm, SolverNode
 from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
-# class creates a data structure for the pyomo variables and parameters
-class Variables:
-
-    # In the constructor, an empty numpy array is created for the class Variable object for each time step
-    def __init__(self, op_horizon):
-        self.x = {}
-        self.op_horizon = op_horizon
-        for i in range(op_horizon):
-            name = "t_" + str(i)
-            self.x[name] = np.empty(shape=0)
-
-    # Function to append a pyomo variable on the numpy array for each time step.
-    # All variables are set to Reals since the Exchange MIQP ADMM algorithm rounds the binary variables
-    def append(self, obj):
-        for time_step in range(self.op_horizon):
-            name = "t_" + str(time_step)
-            obj[time_step].domain = pmo.Reals
-            obj[time_step].value = 0
-            self.x[name] = np.append(self.x[name], obj[time_step])
-        return
-
-    # Function to append a pyomo parameter on the numpy array for each time step
-    def append_param(self, obj, length):
-        for j in range(length):
-            for time_step in range(self.op_horizon):
-                name = "t_" + str(time_step)
-                self.x[name] = np.append(self.x[name], obj[j, time_step])
-        return
-
-    # Function to get the length of a variable or parameter array (arrays have same length for all time step)
-    def get_length(self):
-        counter = 0
-        for j in self.x["t_0"]:
-            counter += 1
-        return counter
-
-    # Function to get a variable or parameter array for a certain time step (lists are implemented as numpy arrays)
-    def get_list(self, time_step):
-        return self.x["t_" + str(time_step)]
-
-    # Function to get a list of the values of a variable or parameter array
-    def get_list_values(self, time_step):
-        data = np.empty(shape=0)
-        for x in self.x["t_" + str(time_step)]:
-            data = np.append(data, x.value)
-        return data
-
-    # Function to set the values of a variable or parameter array
-    def set_list_values(self, new_values, time_step):
-        if self.get_length() != np.size(new_values):
-            raise Exception("Error: Arrays must have the same length!")
-        for j, x in zip(range(self.get_length()), self.x["t_" + str(time_step)]):
-            x.value = new_values[j]
-        return
-
-    # Function to get a matrix of the values of all variables or parameters of a class object for each time step
-    def get_initial_data(self):
-        columns = self.get_length()
-        rows = self.op_horizon
-        data = np.zeros((rows, columns))
-        for t in range(self.op_horizon):
-            data[t] = self.get_list_values(t)
-        return data
-
-    def remove_exchange_var(self):
-        for time_step in range(self.op_horizon):
-            self.x["t_" + str(time_step)] = np.delete(self.get_list(time_step), 0)
-        return
-
-
-# class creates a data structure for the pyomo constraints and parameters that belong to constraints
-# Compared to variables, the constraints have an additional time index "NONE"
-class Constraints:
-
-    # Constructor: An empty numpy array is created for the Constraint object for each time step and the None index
-    # From now on: time index means the time steps plus the None index (t_1, t_2, ... , t_n, None)
-    def __init__(self, op_horizon):
-        self.x = {}
-        self.op_horizon = op_horizon
-        for i in range(op_horizon + 1):
-            name = "index_" + str(i)
-            self.x[name] = np.empty(shape=0)
-
-    # Function to append a pyomo constraint on the numpy array for a certain time index
-    def append(self, obj, index):
-        if index is None:
-            name = "index_" + str(self.op_horizon)
-        else:
-            name = "index_" + str(index)
-        self.x[name] = np.append(self.x[name], obj)
-
-    # Function to append a pyomo parameter on the numpy array for a certain time index
-    def append_param(self, obj, length, index=0):
-        if index is None:
-            name = "index_" + str(self.op_horizon)
-            for j in range(length):
-                self.x[name] = np.append(self.x[name], obj[j])
-        else:
-            for j in range(length):
-                for t in range(self.op_horizon):
-                    name = "index_" + str(t)
-                    self.x[name] = np.append(self.x[name], obj[j, t])
-        return
-
-    # Function to get the constraint or parameter array for a certain time index
-    def get_list(self, index):
-        return self.x["index_" + str(index)]
-
-    # Function to get a list of the values of a constraint or parameter array for a certain time index
-    def get_list_values(self, index):
-        data = np.empty(shape=0)
-        for x in self.x["index_" + str(index)]:
-            data = np.append(data, pyo_core.value(x))
-        return data
-
-    # Function to set the values of a constraint or parameter array for a certain time index
-    def set_list_values(self, new_values, time_step):
-        if time_step != self.op_horizon:
-            for j, x in zip(range(self.get_length()["time_indexed"]), self.x["index_" + str(time_step)]):
-                x.value = new_values[j]
-        else:
-            for j, x in zip(range(self.get_length()["none_indexed"]), self.x["index_" + str(time_step)]):
-                x.value = new_values[j]
-        return
-
-    # Function returns a dictionary of the length of ay constraint or parameter for a time step and the None index
-    # None index has a different length than the time step indices but those have the same length for all time steps
-    def get_length(self):
-        counter_1 = 0
-        counter_2 = 0
-        for x in self.x["index_0"]:
-            counter_1 += 1
-        for x in self.x["index_" + str(self.op_horizon)]:
-            counter_2 += 1
-        dict = {"time_indexed": counter_1, "none_indexed": counter_2}
-        return dict
-
-    # Function to get a matrix of the values of all constraints or parameters of a class object for each time index
-    def get_initial_list(self):
-        initial_list = []
-        for t in range(self.op_horizon + 1):
-            initial_list.append(self.get_list_values(t))
-        return initial_list
-
-    # Function to check if the inequality constraints are violated
-    # If a constraint is not violated, its value is set to zero
-    def violation(self, t):
-        r = self.get_list_values(t)
-        for j in range(len(r)):
-            if r[j] > 0:
-                r[j] = 0
-        return r
-
-    # Function to execute the update of the dual parameter v_k
-    def v_k_update(self, u_k, t):
-        v_k_plus_1 = self.get_list_values(t) + u_k
-        for j in range(len(v_k_plus_1)):
-            if v_k_plus_1[j] <= 0:
-                v_k_plus_1[j] = 0
-        return v_k_plus_1
-
-
 class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
+    """Implementation of the Exchange ADMM Algorithm.
 
+    Uses the Exchange MIQP ADMM algorithm.
+
+    Parameters
+    ----------
+    city_district : CityDistrict
+    solver : str, optional
+        Solver to use for solving (sub)problems.
+    solver_options : dict, optional
+        Options to pass to calls to the solver. Keys are the name of
+        the functions being called and are one of `__call__`, `set_instance_`,
+        `solve`.
+        `__call__` is the function being called when generating an instance
+        with the pyomo SolverFactory.  Additionally to the options provided,
+        `node_ids` is passed to this call containing the IDs of the entities
+        being optimized.
+        `set_instance` is called when a pyomo Model is set as an instance of
+        a persistent solver. `solve` is called to perform an optimization. If
+        not set, `save_results` and `load_solutions` may be set to false to
+        provide a speedup.
+    mode : str, optional
+        Specifies which set of constraints to use.
+        - `convex`  : Use linear constraints
+        - `integer`  : May use non-linear constraints
+    x_update_mode: str, optional
+        Specifies how the constraints are considered
+        - 'constrained' : Constraints are considered by the solver by providing an constrained x-update to it
+        - 'unconstrained' : Constraints are considered by an ADMM method with an augmented term
+    eps_primal : float, optional
+        Primal stopping criterion for the exchange problem solved by the Exchange MIQP ADMM algorithm.
+    eps_dual : float, optional
+        Dual stopping criterion for the exchange problem solved by the Exchange MIQP ADMM algorithm.
+    eps_primal_i : float, optional
+        Primal stopping criterion for the constrained sub-problems solved by the Exchange MIQP ADMM algorithm.
+    eps_dual_i : float, optional
+        Dual stopping criterion for the constrained sub-problems solved by the Exchange MIQP ADMM algorithm.
+    rho : float, optional
+        Stepsize for the ADMM algorithm.
+    max_iterations : int, optional
+        Maximum number of ADMM iterations.
+    robustness : tuple, optional
+        Tuple of two floats. First entry defines how many time steps are
+        protected from deviations. Second entry defines the magnitude of
+        deviations which are considered.
+    """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="integer",
                  x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1, eps_dual_i=0.1,
                  rho=2, max_iterations=3000, robustness=None):
@@ -354,6 +260,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
                 # Empirically the following term worsens the convergence of the algorithm in the unconstrained mode
                 # although it belongs to the mathematical formulation of the algorithm. Therefore, it is only used in
                 # constrained mode
+                # Todo: Double check what happens to unconstrained variant
                 if self.x_update_mode == 'constrained':
                     for t in range(entity.op_horizon):
                         a = self.variable_list[i].get_list(t)
@@ -600,3 +507,199 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
 
         results["schedule"] = p_el_schedules[0]
         return
+
+
+class Variables:
+    """Implementation of the data structure for the binary decision variables and their dual Variables.
+       For each time step, a numpy array is created in which the time indexed pyomo variables or parameters are stored.
+       The complete data structure is created in the class Exchange MIQP ADMM method _get_variables() and is
+       shown graphically in 'data_structure_exchange_miqp_admm.pdf'.
+
+    Parameters
+    ----------
+    op_horizon : int
+        Number of simulation time steps
+    obj : Pyomo Var or Pyomo Param
+        Pyomo object is to append on a time indexed numpy array
+    length: int
+        Length of a numpy array containing pyomo Variables or Parameters
+    time_steo: int
+        Needed to call a Variables array of a specific time step
+    new_values: numpy array
+        Array of values that should replace the actual values of a Variables array of a specific time step
+    """
+    # In the constructor, an empty numpy array is created for the class Variable object for each time step
+    def __init__(self, op_horizon):
+        self.x = {}
+        self.op_horizon = op_horizon
+        for i in range(op_horizon):
+            name = "t_" + str(i)
+            self.x[name] = np.empty(shape=0)
+
+    # Function to append a pyomo variable on the numpy array for each time step.
+    # All variables are set to Reals since the Exchange MIQP ADMM algorithm rounds the binary variables
+    def append(self, obj):
+        for time_step in range(self.op_horizon):
+            name = "t_" + str(time_step)
+            obj[time_step].domain = pmo.Reals
+            obj[time_step].value = 0
+            self.x[name] = np.append(self.x[name], obj[time_step])
+        return
+
+    # Function to append a pyomo parameter on the numpy array for each time step
+    def append_param(self, obj, length):
+        for j in range(length):
+            for time_step in range(self.op_horizon):
+                name = "t_" + str(time_step)
+                self.x[name] = np.append(self.x[name], obj[j, time_step])
+        return
+
+    # Function to get the length of a variable or parameter array (arrays have same length for all time step)
+    def get_length(self):
+        counter = 0
+        for j in self.x["t_0"]:
+            counter += 1
+        return counter
+
+    # Function to get a variable or parameter array for a certain time step (lists are implemented as numpy arrays)
+    def get_list(self, time_step):
+        return self.x["t_" + str(time_step)]
+
+    # Function to get a list of the values of a variable or parameter array
+    def get_list_values(self, time_step):
+        data = np.empty(shape=0)
+        for x in self.x["t_" + str(time_step)]:
+            data = np.append(data, x.value)
+        return data
+
+    # Function to set the values of a variable or parameter array
+    def set_list_values(self, new_values, time_step):
+        if self.get_length() != np.size(new_values):
+            raise Exception("Error: Arrays must have the same length!")
+        for j, x in zip(range(self.get_length()), self.x["t_" + str(time_step)]):
+            x.value = new_values[j]
+        return
+
+    # Function to get a matrix of the values of all variables or parameters of a class object for each time step
+    def get_initial_data(self):
+        columns = self.get_length()
+        rows = self.op_horizon
+        data = np.zeros((rows, columns))
+        for t in range(self.op_horizon):
+            data[t] = self.get_list_values(t)
+        return data
+
+    def remove_exchange_var(self):
+        for time_step in range(self.op_horizon):
+            self.x["t_" + str(time_step)] = np.delete(self.get_list(time_step), 0)
+        return
+
+
+# class creates a data structure for the pyomo constraints and parameters that belong to constraints
+# Compared to variables, the constraints have an additional time index "NONE"
+class Constraints:
+    """Implementation of the data structure for the constraints and their dual Variables.
+       For each time step a numpy array is created in which the time indexed pyomo expressions or Parameters are stored.
+       The complete data structure is created in the class Exchange MIQP ADMM method _get_constraints() and is
+       shown graphically in 'data_structure_exchange_miqp_admm.pdf'.
+
+    Parameters
+    ----------
+    op_horizon : int
+        Number of simulation time steps
+    obj : Pyomo Expression or Pyomo Parameter
+        Pyomo object is to append on a time indexed numpy array
+    length: int
+        Length of a numpy array containing pyomo Expressions or Parameters
+    index: int or None
+        Needed to call a Constraints array of a specific time step
+    new_values: numpy array
+        Array of values that should replace the actual values of a Constraints array of a specific time step
+    """
+    # Constructor: An empty numpy array is created for the Constraint object for each time step and the None index
+    # From now on: time index means the time steps plus the None index (t_1, t_2, ... , t_n, None)
+    def __init__(self, op_horizon):
+        self.x = {}
+        self.op_horizon = op_horizon
+        for i in range(op_horizon + 1):
+            name = "index_" + str(i)
+            self.x[name] = np.empty(shape=0)
+
+    # Function to append a pyomo constraint on the numpy array for a certain time index
+    def append(self, obj, index):
+        if index is None:
+            name = "index_" + str(self.op_horizon)
+        else:
+            name = "index_" + str(index)
+        self.x[name] = np.append(self.x[name], obj)
+
+    # Function to append a pyomo parameter on the numpy array for a certain time index
+    def append_param(self, obj, length, index=0):
+        if index is None:
+            name = "index_" + str(self.op_horizon)
+            for j in range(length):
+                self.x[name] = np.append(self.x[name], obj[j])
+        else:
+            for j in range(length):
+                for t in range(self.op_horizon):
+                    name = "index_" + str(t)
+                    self.x[name] = np.append(self.x[name], obj[j, t])
+        return
+
+    # Function to get the constraint or parameter array for a certain time index
+    def get_list(self, index):
+        return self.x["index_" + str(index)]
+
+    # Function to get a list of the values of a constraint or parameter array for a certain time index
+    def get_list_values(self, index):
+        data = np.empty(shape=0)
+        for x in self.x["index_" + str(index)]:
+            data = np.append(data, pyo_core.value(x))
+        return data
+
+    # Function to set the values of a constraint or parameter array for a certain time index
+    def set_list_values(self, new_values, time_step):
+        if time_step != self.op_horizon:
+            for j, x in zip(range(self.get_length()["time_indexed"]), self.x["index_" + str(time_step)]):
+                x.value = new_values[j]
+        else:
+            for j, x in zip(range(self.get_length()["none_indexed"]), self.x["index_" + str(time_step)]):
+                x.value = new_values[j]
+        return
+
+    # Function returns a dictionary of the length of ay constraint or parameter for a time step and the None index
+    # None index has a different length than the time step indices but those have the same length for all time steps
+    def get_length(self):
+        counter_1 = 0
+        counter_2 = 0
+        for x in self.x["index_0"]:
+            counter_1 += 1
+        for x in self.x["index_" + str(self.op_horizon)]:
+            counter_2 += 1
+        dict = {"time_indexed": counter_1, "none_indexed": counter_2}
+        return dict
+
+    # Function to get a matrix of the values of all constraints or parameters of a class object for each time index
+    def get_initial_list(self):
+        initial_list = []
+        for t in range(self.op_horizon + 1):
+            initial_list.append(self.get_list_values(t))
+        return initial_list
+
+    # Function to check if the inequality constraints are violated
+    # If a constraint is not violated, its value is set to zero
+    def violation(self, t):
+        r = self.get_list_values(t)
+        for j in range(len(r)):
+            if r[j] > 0:
+                r[j] = 0
+        return r
+
+    # Function to execute the update of the dual parameter v_k
+    def v_k_update(self, u_k, t):
+        v_k_plus_1 = self.get_list_values(t) + u_k
+        for j in range(len(v_k_plus_1)):
+            if v_k_plus_1[j] <= 0:
+                v_k_plus_1[j] = 0
+        return v_k_plus_1
+
