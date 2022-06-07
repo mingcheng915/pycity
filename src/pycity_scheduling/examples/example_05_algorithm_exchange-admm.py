@@ -90,8 +90,7 @@ def main(do_plot=False):
     ap.addEntity(ev)
 
     # Perform the scheduling:
-    #opt = ExchangeADMM(city_district=cd, rho=2.0, eps_primal=0.001, eps_dual=0.01)
-    opt = ExchangeMIQPADMM(city_district=cd, x_update_mode='unconstrained')
+    opt = ExchangeADMM(city_district=cd, rho=2.0, eps_primal=0.001, eps_dual=0.01)
     results = opt.solve()
     cd.copy_schedule("admm")
 
