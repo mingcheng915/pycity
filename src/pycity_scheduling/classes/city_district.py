@@ -90,16 +90,21 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
 
     def get_objective(self, coeff=1):
         if self.objective == 'valley-filling':
-            e = coeff * pyomo.sum_product(self.model.p_el_vars, self.model.p_el_vars)
+            obj = 0
             valley = self.valley_profile[self.op_slice]
-            e += 2 * coeff * pyomo.sum_product(valley, self.model.p_el_vars)
-            return e
+            for t in range(self.op_horizon):
+                obj += coeff * self.model.p_el_vars[t] * self.model.p_el_vars[t]
+                obj += 2 * coeff * valley[t] * self.model.p_el_vars[t]
+            return obj
         elif self.objective == 'price':
             prices = self.environment.prices.da_prices[self.op_slice]
             s = sum(abs(prices))
             if s > 0:
+                obj = 0
                 prices = prices * self.op_horizon / s
-                return pyomo.sum_product(prices, self.model.p_el_vars)
+                for t in range(self.op_horizon):
+                    obj += prices[t] * self.model.p_el_vars[t]
+                return obj
             else:
                 return 0
         else:

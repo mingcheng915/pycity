@@ -242,21 +242,20 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
     def _add_objective(self):
         for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
             obj = node.model.beta * entity.get_objective()
-            obj += node.model.rho / 2 * pyomo.sum_product(entity.model.p_el_vars, entity.model.p_el_vars)
+            for j in range(entity.op_horizon):
+                obj += node.model.rho / 2 * entity.model.p_el_vars[j] * entity.model.p_el_vars[j]
             # penalty term is expanded and constant is omitted
             if i == 0:
                 # invert sign of p_el_schedule and p_el_vars (omitted for quadratic term)
-                obj += node.model.rho * pyomo.sum_product(
-                    [(-node.model.last_p_el_schedules[t] - node.model.x_exch_[t] - node.model.u_exch[t])
-                     for t in range(entity.op_horizon)],
-                    entity.model.p_el_vars
-                )
+                penalty = [(-node.model.last_p_el_schedules[t] - node.model.x_exch_[t] - node.model.u_exch[t])
+                           for t in range(entity.op_horizon)]
+                for j in range(entity.op_horizon):
+                    obj += node.model.rho * penalty[j] * entity.model.p_el_vars[j]
             else:
-                obj += node.model.rho * pyomo.sum_product(
-                    [(-node.model.last_p_el_schedules[t] + node.model.x_exch_[t] + node.model.u_exch[t])
-                     for t in range(entity.op_horizon)],
-                    entity.model.p_el_vars
-                )
+                penalty = [(-node.model.last_p_el_schedules[t] + node.model.x_exch_[t] + node.model.u_exch[t])
+                           for t in range(entity.op_horizon)]
+                for j in range(entity.op_horizon):
+                    obj += node.model.rho * penalty[j] * entity.model.p_el_vars[j]
                 # Empirically the following term worsens the convergence of the algorithm in the unconstrained mode
                 # although it belongs to the mathematical formulation of the algorithm. Therefore, it is only used in
                 # constrained mode

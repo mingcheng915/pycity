@@ -58,8 +58,10 @@ class TestConstraints(unittest.TestCase):
         ee = ElectricalEntity(self.env)
         m = pyomo.ConcreteModel()
         ee.populate_model(m, "integer")
-        o = pyomo.sum_product(ee.model.p_el_vars, ee.model.p_el_vars)
-        o -= 2 * 0.3 * pyomo.sum_product(ee.model.p_el_vars)
+        o = 0
+        for t in range(len(ee.model.p_el_vars)):
+            o += ee.model.p_el_vars[t] * ee.model.p_el_vars[t]
+        o -= 2 * 0.3 * sum(ee.model.p_el_vars[t] for t in range(len(ee.model.p_el_vars)))
         m.o = pyomo.Objective(expr=o)
         self.assertEqual(_get_constr_count(ee.model), 0)
         lal_constr = gen_constrs.LowerActivationLimit(ee, "p_el", 0.5, 1)

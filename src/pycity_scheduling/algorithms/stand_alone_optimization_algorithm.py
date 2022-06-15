@@ -38,8 +38,8 @@ class StandAlone(LocalOptimization):
     def _add_objective(self):
         for node, entity in zip(self.nodes, self.entities):
             if not isinstance(entity, CityDistrict):
-                node.model.o = pyomo.Objective(expr=node.model.beta * pyomo.quicksum(ent.get_objective()
-                                                                                     for ent in entity.get_entities()))
+                node.model.o = pyomo.Objective(expr=node.model.beta * sum(ent.get_objective()
+                                                                          for ent in entity.get_entities()))
             else:
                 node.model.o = pyomo.Objective(expr=0)
         return

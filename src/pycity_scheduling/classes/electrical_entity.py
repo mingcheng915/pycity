@@ -101,7 +101,10 @@ class ElectricalEntity(OptimizationEntity):
 
     def get_objective(self, coeff=1):
         if self.objective == 'peak-shaving':
-            return coeff * pyomo.sum_product(self.model.p_el_vars, self.model.p_el_vars)
+            obj = 0
+            for t in range(self.op_horizon):
+                obj += self.model.p_el_vars[t] * self.model.p_el_vars[t]
+            return coeff * obj
         if self.objective in ['price', 'co2']:
             if self.objective == 'price':
                 prices = self.environment.prices.tou_prices
@@ -111,7 +114,10 @@ class ElectricalEntity(OptimizationEntity):
             s = sum(abs(prices))
             if s > 0:
                 prices = prices * self.op_horizon / s
-                return coeff * pyomo.sum_product(prices, self.model.p_el_vars)
+                obj = 0
+                for t in range(self.op_horizon):
+                    obj += prices[t] * self.model.p_el_vars[t]
+                return coeff * obj
             else:
                 return 0
         if self.objective == "max-consumption":
@@ -126,10 +132,16 @@ class ElectricalEntity(OptimizationEntity):
             if coeff < 0:
                 raise ValueError("Setting a coefficient below zero is not supported for the self-consumption "
                                  "objective.")
-            return coeff * pyomo.sum_product(self.model.p_export_var, self.model.p_export_var)
+            obj = 0
+            for t in range(self.op_horizon):
+                obj += self.model.p_export_var[t] * self.model.p_export_var[t]
+            return coeff * obj
         if self.objective == 'flexibility-quantification':
             if not hasattr(self.model, "max_p_flex_var"):
                 raise ValueError("Objective 'flexibility-quantification' needs to be selected during populate_model "
                                  "call.")
-            return coeff * pyomo.sum_product(self.model.max_p_flex_var, self.model.max_p_flex_var)
+            obj = 0
+            for t in range(self.op_horizon):
+                obj += self.model.max_p_flex_var[t] * self.model.max_p_flex_var[t]
+            return coeff * obj
         return super().get_objective(coeff)

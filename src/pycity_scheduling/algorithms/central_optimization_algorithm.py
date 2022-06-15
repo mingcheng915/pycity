@@ -59,13 +59,13 @@ class CentralOptimization(OptimizationAlgorithm):
         """
         def p_el_couple_rule(model, t):
             return self.city_district.model.p_el_vars[t] == \
-                   pyomo.quicksum(entity.model.p_el_vars[t] for entity in self.entities[1:])
+                   sum(entity.model.p_el_vars[t] for entity in self.entities[1:])
         model.couple = pyomo.Constraint(self.city_district.model.t, rule=p_el_couple_rule)
         return
 
     def _add_objective(self):
-        self.node.model.o = pyomo.Objective(expr=pyomo.quicksum(entity.model.beta * entity.get_objective()
-                                                                for entity in self.entities))
+        self.node.model.o = pyomo.Objective(expr=sum(entity.model.beta * entity.get_objective()
+                                                     for entity in self.entities))
         return
 
     def _presolve(self, full_update, beta, robustness, debug):
