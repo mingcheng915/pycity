@@ -130,7 +130,11 @@ def main(do_plot=False):
     print(list(cd.p_el_schedule))
 
     # Perform the scheduling with the Exchange MIQP ADMM algorithm and a unconstrained x_update
+    """
     opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
+                           eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
+   """
+    opt = UnconstrainedLight(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
                            eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
     results = opt.solve()
     cd.copy_schedule("exchange_miqp_admm")

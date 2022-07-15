@@ -94,7 +94,7 @@ def main(do_plot=False):
 
 
     # Perform the city district scheduling using the Exchange MIQP ADMM algorithm:
-    opt = ExchangeMIQPADMM(city_district=district, mode=mode, x_update_mode='constrained', eps_primal=r_exch,
+    opt = UnconstrainedLight(city_district=district, mode=mode, x_update_mode='constrained', eps_primal=r_exch,
                            eps_dual=s_exch, eps_primal_i=r_dual, eps_dual_i=s_dual, max_iterations=max_Iterations)
     results = opt.solve()
     district.copy_schedule("district_schedule")
