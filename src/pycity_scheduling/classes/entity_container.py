@@ -91,17 +91,24 @@ class EntityContainer(ThermalEntityCooling, ThermalEntityHeating, ElectricalEnti
             m.p_el_vars.setlb(None)
 
             def p_th_cool_sum_rule(model, t):
-                return model.p_th_cool_vars[t] == pyomo.quicksum(p_th_Cool_var[t] for
-                                                                 p_th_Cool_var in p_th_cool_var_list)
+                if len(p_th_cool_var_list) > 0:
+                    return model.p_th_cool_vars[t] == sum(p_th_Cool_var[t] for p_th_Cool_var in p_th_cool_var_list)
+                else:
+                    return model.p_th_cool_vars[t] == 0.0
             m.p_th_cool_constr = pyomo.Constraint(m.t, rule=p_th_cool_sum_rule)
 
             def p_th_heat_sum_rule(model, t):
-                return model.p_th_heat_vars[t] == pyomo.quicksum(p_th_Heat_var[t] for
-                                                                 p_th_Heat_var in p_th_heat_var_list)
+                if len(p_th_heat_var_list) > 0:
+                    return model.p_th_heat_vars[t] == sum(p_th_Heat_var[t] for p_th_Heat_var in p_th_heat_var_list)
+                else:
+                    return model.p_th_heat_vars[t] == 0.0
             m.p_th_heat_constr = pyomo.Constraint(m.t, rule=p_th_heat_sum_rule)
 
             def p_el_sum_rule(model, t):
-                return model.p_el_vars[t] == pyomo.quicksum(p_el_var[t] for p_el_var in p_el_var_list)
+                if len(p_el_var_list) > 0:
+                    return model.p_el_vars[t] == sum(p_el_var[t] for p_el_var in p_el_var_list)
+                else:
+                    return model.p_el_vars[t] == 0.0
             m.p_el_constr = pyomo.Constraint(m.t, rule=p_el_sum_rule)
         else:
             raise ValueError(

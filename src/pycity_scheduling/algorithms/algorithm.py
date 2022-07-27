@@ -24,6 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 import numpy as np
 import time
+import warnings
 import pyomo.environ as pyomo
 from pyomo.solvers.plugins.solvers.persistent_solver import PersistentSolver
 from pyomo.opt import SolverStatus, TerminationCondition
@@ -210,7 +211,7 @@ class IterationAlgorithm(OptimizationAlgorithm):
             iterations.append((iterations[-1] + 1) if len(iterations) > 0 else 1)
             self._iteration(results, params, debug=debug)
             self._save_time(results, params)
-            is_last_iteration = self._is_last_iteration(results, params)
+            is_last_iteration = self._is_last_iteration(results, params, debug)
         return
 
     def _iteration(self, results, params, debug):
@@ -222,29 +223,36 @@ class IterationAlgorithm(OptimizationAlgorithm):
             Dictionary in which performance values of the algorithm are stored.
         params : dict
             Dictionary in which intermediate results are stored.
+        """
+        return
+
+    def _is_last_iteration(self, results, params, debug):
+        """Returns True if the current iteration is the last one.
+            It checks if the iteration limit is exceeded.
+            Overwrite this function to apply additional, individual stopping criteria other than the iteration limit.
+            Anyway, this parent method must be called in a child method, so that the check of an exceeded iteration
+            limit below is executed.
+
+        Parameters
+        ----------
         debug : bool, optional
             Specify whether detailed debug information shall be printed.
         Raises
         ------
-        MaxIterationError
+        Warning
             If the stopping criteria can not be reached in max_iterations.
         NonoptimalError
             If no feasible solution for the city district is found or a solver
             problem is encountered.
         """
-        if results["iterations"][-1] > self.max_iterations:
+        if results["iterations"][-1] >= self.max_iterations:
             if debug:
                 print(
-                    "Exceeded iteration limit of {0} iterations. "
-                    "Norms are ||r|| =  {1}, ||s|| = {2}."
-                        .format(self.max_iterations, results["r_norms"][-1], results["s_norms"][-1])
+                    "Exceeded iteration limit of {0} iterations.".format(self.max_iterations)
                 )
-            raise MaxIterationError("Iteration Limit exceeded.")
-        return
-
-    def _is_last_iteration(self, results, params):
-        """Returns True if the current iteration is the last one."""
-        raise NotImplementedError("This method should be implemented by subclass.")
+            warnings.warn("User defined iteration limit exceeded")
+            return True
+        return False
 
 
 class DistributedAlgorithm(OptimizationAlgorithm):

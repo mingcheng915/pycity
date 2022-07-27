@@ -112,6 +112,8 @@ class WindEnergyConverter(ElectricalEntity, wec.WindEnergyConverter):
         """
         m = self.model
 
-        s = pyomo.sum_product(m.p_el_vars, m.p_el_vars)
-        s += -2 * pyomo.sum_product(self.p_el_supply[self.op_slice], m.p_el_vars)
+        s = 0
+        for t in self.op_time_vec:
+            s += m.p_el_vars[t] * m.p_el_vars[t]
+            s -= 2 * self.p_el_supply[self.op_slice][t] * m.p_el_vars[t]
         return coeff * s

@@ -94,9 +94,11 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
                 # penalty term is expanded and constant is omitted
                 # invert sign of p_el_schedule and p_el_vars (omitted for quadratic
                 # term)
-                obj -= pyomo.sum_product(node.model.lambdas, entity.model.p_el_vars)
+                for t in range(entity.op_horizon):
+                    obj -= node.model.lambdas[t] * entity.model.p_el_vars[t]
             else:
-                obj += pyomo.sum_product(node.model.lambdas, entity.model.p_el_vars)
+                for t in range(entity.op_horizon):
+                    obj += node.model.lambdas[t] * entity.model.p_el_vars[t]
             node.model.o = pyomo.Objective(expr=obj)
         return
 
@@ -111,7 +113,9 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
         results["lambdas"] = []
         return results, params
 
-    def _is_last_iteration(self, results, params):
+    def _is_last_iteration(self, results, params, debug):
+        if super(DualDecomposition, self)._is_last_iteration(results, params, debug):
+            return True
         return results["r_norms"][-1] <= self.eps_primal
 
     def _iteration(self, results, params, debug):
