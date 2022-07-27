@@ -251,4 +251,7 @@ class ElectricalVehicle(Battery):
         m = self.model
         c = np.array(list(map(lambda x: x+1, range(self.op_horizon))))
         c = c * (coeff * self.op_horizon / sum(c))
-        return pyomo.sum_product(c, m.p_el_vars, m.p_el_vars)
+        obj = 0
+        for t in range(self.op_horizon):
+            obj += c[t] * m.p_el_vars[t] * m.p_el_vars[t]
+        return obj

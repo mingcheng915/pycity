@@ -154,7 +154,8 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
 
             # consume e_consumption the op_horizon
             def p_consumption_rule(model):
-                return pyomo.sum_product(model.p_el_vars) * self.time_slot == self.e_consumption
+                return sum(model.p_el_vars[t] for t in range(len(model.p_el_vars))) * self.time_slot == \
+                       self.e_consumption
             m.P_consumption_constr = pyomo.Constraint(rule=p_consumption_rule)
 
         elif mode == "integer":
@@ -179,14 +180,17 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
 
             # coupling the start variable to the electrical variables following
             def state_coupl_rule(model, t):
-                return model.p_el_vars[t] == self.p_el_nom * pyomo.quicksum(
-                       (model.p_start_vars[t] for t in range(max(0, t+1-self.runtime),
-                                                             min(self.op_horizon-self.runtime+1, t+1))))
+                return model.p_el_vars[t] == self.p_el_nom * sum(
+                       (model.p_start_vars[tau] for tau in range(max(0, t+1-self.runtime),
+                                                                 min(self.op_horizon-self.runtime+1, t+1))))
             m.state_coupl_integer_constr = pyomo.Constraint(m.t, rule=state_coupl_rule)
 
             # run once in the op_horizon
             def state_once_rule(model):
-                return pyomo.sum_product(model.p_start_vars) == 1.0
+                if len(model.p_start_vars) > 0:
+                    return sum(model.p_start_vars[t] for t in range(len(model.p_start_vars))) == 1.0
+                else:
+                    return pyomo.sum_product(model.p_start_vars) == 1.0
             m.state_once_integer_constr = pyomo.Constraint(rule=state_once_rule)
 
         else:
@@ -251,6 +255,8 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         m = self.model
         max_loading_time = sum(self.load_time) * self.time_slot
         optimal_p_el = self.e_consumption / max_loading_time
-        obj = coeff * pyomo.sum_product(m.p_el_vars, m.p_el_vars)
-        obj += -2 * coeff * optimal_p_el * pyomo.sum_product(m.p_el_vars)
+        obj = 0
+        for t in range(self.op_horizon):
+            obj += coeff * m.p_el_vars[t] * m.p_el_vars[t]
+        obj -= 2 * coeff * optimal_p_el * sum(m.p_el_vars[t] for t in range(self.op_horizon))
         return obj

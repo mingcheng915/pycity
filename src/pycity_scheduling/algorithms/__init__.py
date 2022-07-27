@@ -27,7 +27,8 @@ from .local_optimization_algorithm import LocalOptimization
 from .exchange_admm_algorithm import ExchangeADMM
 from .central_optimization_algorithm import CentralOptimization
 from .dual_decomposition_algorithm import DualDecomposition
-
+from .exchange_miqp_admm_algorithm import ExchangeMIQPADMM
+from .exchange_miqp_admm_unconstrained_light import ExchangeMIQPADMMUnconstrainedLight
 
 __all__ = [
     'StandAlone',
@@ -35,8 +36,11 @@ __all__ = [
     'ExchangeADMM',
     'CentralOptimization',
     'DualDecomposition',
+    'ExchangeMIQPADMM',
+    'ExchangeMIQPADMMUnconstrainedLight',
     'algorithm',
     'algorithms',
+
 ]
 
 
@@ -46,4 +50,6 @@ algorithms = {
     'exchange-admm': ExchangeADMM,
     'central': CentralOptimization,
     'dual-decomposition': DualDecomposition,
+    'exchange-miqp-admm': ExchangeMIQPADMM,
+    'exchange-miqp-admm-unconstrained-light': ExchangeMIQPADMMUnconstrainedLight,
 }

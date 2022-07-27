@@ -100,22 +100,20 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
     def _add_objective(self):
         for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
             obj = node.model.beta * entity.get_objective()
-            obj += self.rho / 2 * pyomo.sum_product(entity.model.p_el_vars, entity.model.p_el_vars)
+            for t in range(entity.op_horizon):
+                obj += self.rho / 2 * entity.model.p_el_vars[t] * entity.model.p_el_vars[t]
             # penalty term is expanded and constant is omitted
             if i == 0:
-                # invert sign of p_el_schedule and p_el_vars (omitted for quadratic
-                # term)
-                obj += self.rho * pyomo.sum_product(
-                    [(-node.model.last_p_el_schedules[t] - node.model.xs_[t] - node.model.us[t])
-                     for t in range(entity.op_horizon)],
-                     entity.model.p_el_vars
-                )
+                # invert sign of p_el_schedule and p_el_vars (omitted for quadratic term)
+                penalty = [(-node.model.last_p_el_schedules[t] - node.model.xs_[t] - node.model.us[t])
+                           for t in range(entity.op_horizon)]
+                for t in range(entity.op_horizon):
+                    obj += self.rho * penalty[t] * entity.model.p_el_vars[t]
             else:
-                obj += self.rho * pyomo.sum_product(
-                    [(-node.model.last_p_el_schedules[t] + node.model.xs_[t] + node.model.us[t])
-                     for t in range(entity.op_horizon)],
-                    entity.model.p_el_vars
-                )
+                penalty = [(-node.model.last_p_el_schedules[t] + node.model.xs_[t] + node.model.us[t])
+                           for t in range(entity.op_horizon)]
+                for t in range(entity.op_horizon):
+                    obj += self.rho * penalty[t] * entity.model.p_el_vars[t]
             node.model.o = pyomo.Objective(expr=obj)
         return
 
@@ -130,7 +128,9 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
         results["s_norms"] = []
         return results, params
 
-    def _is_last_iteration(self, results, params):
+    def _is_last_iteration(self, results, params, debug):
+        if super(ExchangeADMM, self)._is_last_iteration(results, params, debug):
+            return True
         return results["r_norms"][-1] <= self.eps_primal and results["s_norms"][-1] <= self.eps_dual
 
     def _iteration(self, results, params, debug):

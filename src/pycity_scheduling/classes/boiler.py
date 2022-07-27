@@ -119,4 +119,4 @@ class Boiler(ThermalEntityHeating, bl.Boiler):
         ExpressionBase :
             Objective function.
         """
-        return coeff * pyomo.sum_product(self.model.p_th_heat_vars)
+        return coeff * sum(self.model.p_th_heat_vars[t] for t in range(self.op_horizon))
