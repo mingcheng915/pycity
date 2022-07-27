@@ -82,7 +82,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="integer",
                  x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1, eps_dual_i=0.1,
-                 rho=2, max_iterations=3000, robustness=None):
+                 rho=2, max_iterations=10000, robustness=None):
         super(ExchangeMIQPADMM, self).__init__(city_district, solver, solver_options, mode)
         self.city_district = city_district
         self.mode = mode

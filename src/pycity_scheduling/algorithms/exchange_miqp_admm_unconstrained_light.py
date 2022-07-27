@@ -33,7 +33,7 @@ from pycity_scheduling.algorithms.algorithm import IterationAlgorithm, Distribut
 from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
-class UnconstrainedLight(IterationAlgorithm, DistributedAlgorithm):
+class ExchangeMIQPADMMUnconstrainedLight(IterationAlgorithm, DistributedAlgorithm):
     """Implementation of the Exchange ADMM Algorithm.
 
     Uses the Exchange MIQP ADMM algorithm.
@@ -82,8 +82,8 @@ class UnconstrainedLight(IterationAlgorithm, DistributedAlgorithm):
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="integer",
                  x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1, eps_dual_i=0.1,
-                 rho=2, max_iterations=3000, robustness=None):
-        super(UnconstrainedLight, self).__init__(city_district, solver, solver_options, mode)
+                 rho=2, max_iterations=10000, robustness=None):
+        super(ExchangeMIQPADMMUnconstrainedLight, self).__init__(city_district, solver, solver_options, mode)
         self.city_district = city_district
         self.mode = mode
         self.x_update_mode = x_update_mode
@@ -313,8 +313,6 @@ class UnconstrainedLight(IterationAlgorithm, DistributedAlgorithm):
 
     # Function that checks if the stopping criteria is reached
     def _is_last_iteration(self, results, params, debug):
-        if super(UnconstrainedLight, self)._is_last_iteration(results, params, debug):
-            return True
         primal = 0
         dual = 0
         for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
@@ -332,18 +330,21 @@ class UnconstrainedLight(IterationAlgorithm, DistributedAlgorithm):
         print("s_exch", results["s_norms"][-1])
         print("r_sub", primal)
         print("s_sub", dual)
+        print("")
 
+        if super(ExchangeMIQPADMMUnconstrainedLight, self)._is_last_iteration(results, params, debug):
+            return True
 
         # Reaching the stopping criteria
         if results["r_norms"][-1] <= self.eps_primal and results["s_norms"][-1] <= self.eps_dual\
                 and primal <= self.eps_primal_i and dual <= self.eps_dual_i:
-            print("reached")
+            print("\nStopping criteria reached.\n")
             return True
 
         return
 
     def _iteration(self, results, params, debug):
-        super(UnconstrainedLight, self)._iteration(results, params, debug)
+        super(ExchangeMIQPADMMUnconstrainedLight, self)._iteration(results, params, debug)
         op_horizon = self.entities[0].op_horizon
         self.counter += 1
         print("Iteration", self.counter)

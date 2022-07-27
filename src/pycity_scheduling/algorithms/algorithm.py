@@ -245,7 +245,7 @@ class IterationAlgorithm(OptimizationAlgorithm):
             If no feasible solution for the city district is found or a solver
             problem is encountered.
         """
-        if results["iterations"][-1] > self.max_iterations:
+        if results["iterations"][-1] >= self.max_iterations:
             if debug:
                 print(
                     "Exceeded iteration limit of {0} iterations.".format(self.max_iterations)

@@ -26,6 +26,7 @@ import numpy as np
 
 from pycity_scheduling.classes import *
 from pycity_scheduling.algorithms import *
+from pycity_scheduling.solvers import *
 
 
 # This is a very simple power scheduling example using the distributed Exchange MIQP ADMM algorithm.
@@ -113,7 +114,7 @@ def main(do_plot=False):
     opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='constrained', eps_primal=0.01,
                            eps_dual=0.01, eps_primal_i=0.01, eps_dual_i=0.01)
     results = opt.solve()
-    cd.copy_schedule("exchange_miqp_admm")
+    cd.copy_schedule("exchange_miqp_admm-constrained")
 
     # Print some results:
     print("")
@@ -129,29 +130,28 @@ def main(do_plot=False):
     print("Schedule of the city district:")
     print(list(cd.p_el_schedule))
 
-    # Perform the scheduling with the Exchange MIQP ADMM algorithm and a unconstrained x_update
-    """
-    opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
-                           eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
-   """
-    opt = UnconstrainedLight(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
-                           eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
-    results = opt.solve()
-    cd.copy_schedule("exchange_miqp_admm")
+    # Perform the scheduling with the Exchange MIQP ADMM algorithm and an unconstrained x_update (currently only works
+    # with commercial solvers):
+    if DEFAULT_SOLVER is "gurobi_direct" or DEFAULT_SOLVER is "gurobi_persistent" or DEFAULT_SOLVER is "cplex":
+        opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
+                               eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
 
-    # Print some results:
-    print("")
-    print("")
-    print("Exchange MIQP ADMM, unconstrained x-update - Number of iterations:", results["iterations"][-1])
-    print("")
+        results = opt.solve()
+        cd.copy_schedule("exchange_miqp_admm-unconstrained")
 
-    # Print the building's schedules:
-    print("Schedule building no. one:")
-    print(list(bd1.p_el_schedule))
-    print("Schedule building no. two:")
-    print(list(bd2.p_el_schedule))
-    print("Schedule of the city district:")
-    print(list(cd.p_el_schedule))
+        # Print some results:
+        print("")
+        print("")
+        print("Exchange MIQP ADMM, unconstrained x-update - Number of iterations:", results["iterations"][-1])
+        print("")
+
+        # Print the building's schedules:
+        print("Schedule building no. one:")
+        print(list(bd1.p_el_schedule))
+        print("Schedule building no. two:")
+        print(list(bd2.p_el_schedule))
+        print("Schedule of the city district:")
+        print(list(cd.p_el_schedule))
     return
 
 
@@ -160,11 +160,11 @@ def main(do_plot=False):
 # so that both the local and system level objectives are satisfied even in integer mode.
 # The Exchange MIQP ADMM algorithm has two different modes: In the "constrained" mode the x-update of the algorithm
 # is executed by the solver under the constraints of the optimization problem. In the "unconstrained" mode
-# the constraints of the optimization problem are considered by an augmented term in the x-update of the algorithm.
-# Therefore, the solver only has to minimize an polynomial objective function as x-update. This example shows that
-# the solution of the Exchange MIQP ADMM algorithm is almost identical in both the constrained and the unconstrained
-# mode but the algorithm needs more iterations in the unconstrained mode.
-# Anyway, both scheduling results are close to the ones of the Central Optimization algorithm, which demonstrates
+# the constraints of the optimization problem are alternatively considered by an augmented term in the x-update of the
+# algorithm. Therefore, the solver only has to minimize an polynomial objective function as x-update.
+# This example shows that the solution of the Exchange MIQP ADMM algorithm is almost identical in both the constrained
+# and the unconstrained mode, but (so far) the algorithm needs more iterations in the unconstrained mode.
+# Nevertheless, both scheduling results are close to the ones of the Central Optimization algorithm, which demonstrates
 # the correctness of the distributed algorithm.
 
 

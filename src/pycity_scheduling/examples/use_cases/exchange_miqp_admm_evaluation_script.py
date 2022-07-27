@@ -1,11 +1,10 @@
 from pycity_scheduling.algorithms import *
 import matplotlib.pyplot as plt
 import pycity_scheduling.util.factory as factory
-from pycity_scheduling.classes import (HeatPump, ElectricalHeater, Battery)
 
 
 # Set the parameters for the algorithm
-max_Iterations = 5000
+max_iterations = 5
 mode = 'integer'
 r_exch = 0.1
 s_exch = 0.1
@@ -92,10 +91,10 @@ def main(do_plot=False):
                                                 building_objective='price'
                                                 )
 
-
-    # Perform the city district scheduling using the Exchange MIQP ADMM algorithm:
-    opt = UnconstrainedLight(city_district=district, mode=mode, x_update_mode='constrained', eps_primal=r_exch,
-                           eps_dual=s_exch, eps_primal_i=r_dual, eps_dual_i=s_dual, max_iterations=max_Iterations)
+    # Perform the city district scheduling using the Exchange MIQP ADMM Unconstrained Light algorithm:
+    opt = ExchangeMIQPADMMUnconstrainedLight(city_district=district, mode=mode, x_update_mode='constrained',
+                                             eps_primal=r_exch, eps_dual=s_exch, eps_primal_i=r_dual, eps_dual_i=s_dual,
+                                             max_iterations=max_iterations)
     results = opt.solve()
     district.copy_schedule("district_schedule")
 
