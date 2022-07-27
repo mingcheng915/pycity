@@ -1749,7 +1749,7 @@ def get_env(op_horizon, mpc_horizon=None, mpc_step_width=1):
 
 
 def assert_equal_array(a: np.ndarray, expected):
-    if not np.allclose(a, expected):
+    if not np.allclose(a, expected, rtol=1e-3, atol=1e-6):
         expected = np.array(expected)
         msg = "Array {} does not equal expected array {}".format(np.array2string(a), np.array2string(expected))
         raise AssertionError(msg)
