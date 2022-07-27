@@ -71,8 +71,8 @@ class TestConstraints(unittest.TestCase):
         solve_model(m)
         ee.update_schedule()
         for i in ee.op_time_vec:
-            self.assertAlmostEqual(ee.p_el_schedule[i], 0.3, 4)
-            self.assertAlmostEqual(ee.p_el_state_schedule[i], 1.0, 4)
+            self.assertAlmostEqual(ee.p_el_schedule[i], 0.3, 3)
+            self.assertAlmostEqual(ee.p_el_state_schedule[i], 1.0, 3)
 
         lal_constr.apply(ee.model, "integer")
         self.assertEqual(_get_constr_count(ee.model), 12*2)
@@ -80,8 +80,8 @@ class TestConstraints(unittest.TestCase):
         solve_model(m)
         ee.update_schedule()
         for i in ee.op_time_vec:
-            self.assertAlmostEqual(ee.p_el_schedule[i], 0.5, 4)
-            self.assertAlmostEqual(ee.p_el_state_schedule[i], 1.0, 4)
+            self.assertAlmostEqual(ee.p_el_schedule[i], 0.5, 3)
+            self.assertAlmostEqual(ee.p_el_state_schedule[i], 1.0, 3)
         return
 
 
