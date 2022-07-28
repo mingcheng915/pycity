@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND noninteractive
 ENV TZ Etc/UTC
 
 RUN apt-get update &&\
-    apt-get install -y wget software-properties-common curl apt-utils git
+    apt-get install -y wget software-properties-common curl apt-utils git mpich
 
 # Download and install the SCIP optimization solver (SCIPOptSuite 8.0.0).
 # Important note: You are allowed to retrieve a copy of SCIP for research purposes as a member of a noncommercial and academic institution only.
