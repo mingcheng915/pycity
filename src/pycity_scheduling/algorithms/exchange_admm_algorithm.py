@@ -2,7 +2,7 @@
 The pycity_scheduling framework
 
 
-Copyright (C) 2022,
+Copyright (C) 2021,
 Institute for Automation of Complex Power Systems (ACS),
 E.ON Energy Research Center (E.ON ERC),
 RWTH Aachen University
@@ -144,11 +144,13 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
             params["x_"] = np.zeros(op_horizon)
         if "u" not in params:
             params["u"] = np.zeros(op_horizon)
-        u = params["u"]
+        last_u = params["u"]
+        last_p_el = params["p_el"]
+        last_x_ = params["x_"]
 
-        # -----------------
-        # 1) optimize all entities
-        # -----------------
+        # ------------------------------------------
+        # 1) Optimize all entities
+        # ------------------------------------------
         to_solve_nodes = []
         variables = []
         for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
@@ -159,21 +161,19 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
                 continue
 
             for t in range(op_horizon):
-                node.model.last_p_el_schedules[t] = params["p_el"][i][t]
-                node.model.xs_[t] = params["x_"][t]
-                node.model.us[t] = params["u"][t]
+                node.model.last_p_el_schedules[t] = last_p_el[i][t]
+                node.model.xs_[t] = last_x_[t]
+                node.model.us[t] = last_u[t]
             node.obj_update()
             to_solve_nodes.append(node)
             variables.append([entity.model.p_el_vars[t] for t in range(op_horizon)])
         self._solve_nodes(results, params, to_solve_nodes, variables=variables, debug=debug)
 
-        # --------------------------
-        # 2) incentive signal update
-        # --------------------------
+        # ------------------------------------------
+        # 2) Calculate incentive signal update
+        # ------------------------------------------
         p_el_schedules = np.array([extract_pyomo_values(entity.model.p_el_vars, float) for entity in self.entities])
         x_ = (-p_el_schedules[0] + sum(p_el_schedules[1:])) / len(self.entities)
-
-        u += x_
 
         # ------------------------------------------
         # 3) Calculate parameters for stopping criteria
@@ -181,13 +181,16 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
         results["r_norms"].append(np.math.sqrt(len(self.entities)) * np.linalg.norm(x_))
 
         s = np.zeros_like(p_el_schedules)
-        s[0] = - self.rho * (-p_el_schedules[0] + params["p_el"][0] + params["x_"] - x_)
+        s[0] = - self.rho * (-p_el_schedules[0] + last_p_el[0] + last_x_ - x_)
         for i in range(1, len(self.entities)):
-            s[i] = - self.rho * (p_el_schedules[i] - params["p_el"][i] + params["x_"] - x_)
+            s[i] = - self.rho * (p_el_schedules[i] - last_p_el[i] + last_x_ - x_)
         results["s_norms"].append(np.linalg.norm(s.flatten()))
 
-        # save parameters for another iteration
+        # ------------------------------------------
+        # 4) Save required parameters for another iteration
+        # ------------------------------------------
         params["p_el"] = p_el_schedules
         params["x_"] = x_
-        params["u"] = u
+        params["u"] += x_
+
         return
