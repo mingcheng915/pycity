@@ -2,7 +2,7 @@
 The pycity_scheduling framework
 
 
-Copyright (C) 2022,
+Copyright (C) 2021,
 Institute for Automation of Complex Power Systems (ACS),
 E.ON Energy Research Center (E.ON ERC),
 RWTH Aachen University
@@ -125,9 +125,9 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
             params["lambdas"] = np.zeros(op_horizon)
         lambdas = params["lambdas"]
 
-        # -----------------
-        # 1) optimize all entities
-        # -----------------
+        # ------------------------------------------
+        # 1) Optimize all entities
+        # ------------------------------------------
         for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
             if not isinstance(
                     entity,
@@ -139,9 +139,9 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
             node.obj_update()
             node.solve(variables=[entity.model.p_el_vars[t] for t in range(op_horizon)], debug=debug)
 
-        # --------------------------
-        # 2) incentive signal update
-        # --------------------------
+        # ------------------------------------------
+        # 2) Calculate incentive signal update
+        # ------------------------------------------
         p_el_schedules = np.array([extract_pyomo_values(entity.model.p_el_vars, float) for entity in self.entities])
         lambdas -= self.rho * p_el_schedules[0]
         lambdas += self.rho * np.sum(p_el_schedules[1:], axis=0)
@@ -152,8 +152,12 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
         r = np.zeros(op_horizon)
         r -= p_el_schedules[0]
         r += np.sum(p_el_schedules[1:], axis=0)
-
-        # save parameters for another iteration
         results["r_norms"].append(np.linalg.norm(r, np.inf))
         results["lambdas"].append(np.copy(lambdas))
+
+        # ------------------------------------------
+        # 4) Save required parameters for another iteration
+        # ------------------------------------------
+        params["lambdas"] = lambdas
+
         return

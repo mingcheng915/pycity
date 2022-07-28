@@ -89,7 +89,7 @@ def main(do_plot=False):
     ap.addEntity(ev)
 
     # Perform the scheduling:
-    opt = DualDecomposition(city_district=cd, rho=0.1, eps_primal=1.0)
+    opt = DualDecomposition(city_district=cd, rho=0.1, eps_primal=0.01)
     results = opt.solve()
     cd.copy_schedule("dual_decomposition")
 
