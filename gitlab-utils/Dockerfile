@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND noninteractive
 ENV TZ Etc/UTC
 
 RUN apt-get update &&\
-    apt-get install -y wget software-properties-common curl apt-utils git mpich
+    apt-get install -y apt-utils software-properties-common build-essential wget curl git mpich
 
 # Download and install the SCIP optimization solver (SCIPOptSuite 8.0.0).
 # Important note: You are allowed to retrieve a copy of SCIP for research purposes as a member of a noncommercial and academic institution only.
@@ -59,7 +59,7 @@ FROM base as python37
 RUN cd / &&\
     add-apt-repository -y ppa:deadsnakes/ppa &&\
     apt-get update &&\
-    apt-get install -y python3.7-venv python3-pip &&\
+    apt-get install -y python3.7-venv python3-pip python3.7-dev &&\
     cd /
 
 
@@ -80,7 +80,7 @@ FROM base as python38
 RUN cd / &&\
     add-apt-repository -y ppa:deadsnakes/ppa &&\
     apt-get update &&\
-    apt-get install -y python3.8-venv python3-pip &&\
+    apt-get install -y python3.8-venv python3-pip python3.8-dev &&\
     cd /
 
 
@@ -101,7 +101,7 @@ FROM base as python39
 RUN cd / &&\
     add-apt-repository -y ppa:deadsnakes &&\
     apt-get update &&\
-    apt-get install -y python3.9-venv python3-pip &&\
+    apt-get install -y python3.9-venv python3-pip python3.9-dev &&\
     cd /
 
 
