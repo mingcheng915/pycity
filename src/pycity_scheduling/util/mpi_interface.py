@@ -1,0 +1,61 @@
+"""
+The pycity_scheduling framework
+
+
+Copyright (C) 2021,
+Institute for Automation of Complex Power Systems (ACS),
+E.ON Energy Research Center (E.ON ERC),
+RWTH Aachen University
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+import os
+import sys
+import functools
+
+
+class MPIInterface:
+    def __init__(self):
+        self.mpi_comm = None
+        self.mpi_rank = 0
+        self.mpi_size = 1
+        try:
+            from mpi4py import MPI
+            self.mpi = MPI
+            self.mpi_comm = MPI.COMM_WORLD
+            self.mpi_rank = self.mpi_comm.Get_rank()
+            self.mpi_size = self.mpi_comm.Get_size()
+        except:
+            pass
+
+    def get_rank(self):
+        return self.mpi_rank
+
+    def get_size(self):
+        return self.mpi_size
+
+    def get_comm(self):
+        return self.mpi_comm
+
+    def disable_multiple_printing(self):
+        """
+        Turn off printing for all MPI processes with MPI rank other than 0 and always flush prints for rank 0.
+        """
+        if self.mpi_rank > 0:
+            sys.stdout = open(os.devnull, 'w')
+            sys.stderr = open(os.devnull, 'w')
+        else:
+            sys.stdout = os.fdopen(sys.stdout.fileno(), 'a+', 1)
+            sys.stderr = os.fdopen(sys.stderr.fileno(), 'a+', 1)
