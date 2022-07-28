@@ -30,9 +30,10 @@ from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
 class LocalOptimization(DistributedAlgorithm):
-    """Implementation of the reference optimization algorithm.
+    """
+    Implementation of the reference Local Optimization algorithm.
 
-        Schedule all nodes in `city_district` on their own.
+    Schedule all nodes (i.e., buildings) in `city_district` on their own.
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="convex",
                  robustness=None):

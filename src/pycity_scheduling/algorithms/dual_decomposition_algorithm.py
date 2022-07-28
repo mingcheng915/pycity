@@ -32,46 +32,43 @@ from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
 class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
-    """Implementation of the Dual Decomposition Algorithm.
+    """
+    Implementation of the distributed Dual Decomposition algorithm.
 
+    Parameters
+    ----------
+    city_district : CityDistrict
+    solver : str, optional
+        Solver to use for solving (sub)problems.
+    solver_options : dict, optional
+        Options to pass to calls to the solver. Keys are the name of
+        the functions being called and are one of `__call__`, `set_instance_`,
+        `solve`.
+        `__call__` is the function being called when generating an instance
+        with the pyomo SolverFactory.  Additionally to the options provided,
+        `node_ids` is passed to this call containing the IDs of the entities
+        being optimized.
+        `set_instance` is called when a pyomo Model is set as an instance of
+        a persistent solver. `solve` is called to perform an optimization. If
+        not set, `save_results` and `load_solutions` may be set to false to
+        provide a speedup.
+    mode : str, optional
+        Specifies which set of constraints to use.
+        - `convex`  : Use linear constraints
+        - `integer`  : May use non-linear constraints
+    eps_primal : float, optional
+        Primal stopping criterion for the dual decomposition algorithm.
+    rho : float, optional
+        Step size for the dual decomposition algorithm.
+    max_iterations : int, optional
+        Maximum number of ADMM iterations.
+    robustness : tuple, optional
+        Tuple of two floats. First entry defines how many time steps are
+        protected from deviations. Second entry defines the magnitude of
+        deviations which are considered.
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="convex",
                  eps_primal=0.1, rho=2.0, max_iterations=10000, robustness=None):
-        """
-        Set up the Dual Decomposition Algorithm for optimizing a specific city district.
-
-        Parameters
-        ----------
-        city_district : CityDistrict
-        solver : str, optional
-            Solver to use for solving (sub)problems.
-        solver_options : dict, optional
-            Options to pass to calls to the solver. Keys are the name of
-            the functions being called and are one of `__call__`, `set_instance_`,
-            `solve`.
-            `__call__` is the function being called when generating an instance
-            with the pyomo SolverFactory.  Additionally to the options provided,
-            `node_ids` is passed to this call containing the IDs of the entities
-            being optimized.
-            `set_instance` is called when a pyomo Model is set as an instance of
-            a persistent solver. `solve` is called to perform an optimization. If
-            not set, `save_results` and `load_solutions` may be set to false to
-            provide a speedup.
-        mode : str, optional
-            Specifies which set of constraints to use.
-            - `convex`  : Use linear constraints
-            - `integer`  : May use non-linear constraints
-        eps_primal : float, optional
-            Primal stopping criterion for the dual decomposition algorithm.
-        rho : float, optional
-            Stepsize for the dual decomposition algorithm.
-        max_iterations : int, optional
-            Maximum number of ADMM iterations.
-        robustness : tuple, optional
-            Tuple of two floats. First entry defines how many time steps are
-            protected from deviations. Second entry defines the magnitude of
-            deviations which are considered.
-        """
         super(DualDecomposition, self).__init__(city_district, solver, solver_options, mode)
         self.eps_primal = eps_primal
         self.rho = rho

@@ -30,10 +30,10 @@ from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
 class CentralOptimization(OptimizationAlgorithm):
-    """ Implementation of a central Algorithm.
+    """
+    Implementation of the reference Central Optimization algorithm.
 
-        Only creates one model and calls the solver only once. Combines the
-        objectives of all entities.
+    Only creates one model and calls the solver once. Combines the objectives of all entities.
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="convex",
                  robustness=None):

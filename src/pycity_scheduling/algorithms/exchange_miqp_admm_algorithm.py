@@ -34,9 +34,9 @@ from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
 class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
-    """Implementation of the Exchange ADMM Algorithm.
-
-    Uses the Exchange MIQP ADMM algorithm.
+    """
+    Implementation of the distributed ADMM algorithm.
+    This class implements the distributed Exchange MIQP ADMM as described in [1].
 
     Parameters
     ----------
@@ -72,13 +72,19 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
     eps_dual_i : float, optional
         Dual stopping criterion for the constrained sub-problems solved by the Exchange MIQP ADMM algorithm.
     rho : float, optional
-        Stepsize for the ADMM algorithm.
+        Step size for the ADMM algorithm.
     max_iterations : int, optional
         Maximum number of ADMM iterations.
     robustness : tuple, optional
         Tuple of two floats. First entry defines how many time steps are
         protected from deviations. Second entry defines the magnitude of
         deviations which are considered.
+
+    References
+    ----------
+    [1] "A simple effective heuristic for embedded mixed-integer quadratic programming"
+    by Reza Takapoui, Nicholas Moehle, Stephen Boyd, and Alberto Bemporad
+    Online: https://web.stanford.edu/~boyd/papers/pdf/miqp_admm.pdf (accessed on 2022/07/28)
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="integer",
                  x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1, eps_dual_i=0.1,

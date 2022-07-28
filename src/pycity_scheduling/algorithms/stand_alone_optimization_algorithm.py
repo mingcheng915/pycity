@@ -30,10 +30,10 @@ from pycity_scheduling.algorithms.local_optimization_algorithm import LocalOptim
 
 
 class StandAlone(LocalOptimization):
-    """Implementation of the reference optimization algorithm.
+    """
+    Implementation of the reference Stand-alone Optimization algorithm.
 
-    Schedule all entities in `city_district` on their own.
-
+    Schedule all entities (i.e., devices) in `city_district` on their own.
     """
     def _add_objective(self):
         for node, entity in zip(self.nodes, self.entities):

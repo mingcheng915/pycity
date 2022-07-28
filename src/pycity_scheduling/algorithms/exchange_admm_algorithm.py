@@ -32,9 +32,9 @@ from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
 class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
-    """Implementation of the Exchange ADMM Algorithm.
-
-    Uses the Exchange ADMM algorithm described in [1].
+    """
+    Implementation of the distributed ADMM algorithm.
+    This class implements the Exchange ADMM as described in [1].
 
     Parameters
     ----------
@@ -62,7 +62,7 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
     eps_dual : float, optional
         Dual stopping criterion for the ADMM algorithm.
     rho : float, optional
-        Stepsize for the ADMM algorithm.
+        Step size for the ADMM algorithm.
     max_iterations : int, optional
         Maximum number of ADMM iterations.
     robustness : tuple, optional
@@ -72,10 +72,10 @@ class ExchangeADMM(IterationAlgorithm, DistributedAlgorithm):
 
     References
     ----------
-    .. [1] "Alternating Direction Method of Multipliers for Decentralized
-       Electric Vehicle Charging Control" by Jose Rivera, Philipp Wolfrum,
-       Sandra Hirche, Christoph Goebel, and Hans-Arno Jacobsen
-       Online: https://mediatum.ub.tum.de/doc/1187583/1187583.pdf (accessed on 2020/09/28)
+    [1] "Alternating Direction Method of Multipliers for Decentralized
+    Electric Vehicle Charging Control" by Jose Rivera, Philipp Wolfrum,
+    Sandra Hirche, Christoph Goebel, and Hans-Arno Jacobsen
+    Online: https://mediatum.ub.tum.de/doc/1187583/1187583.pdf (accessed on 2020/09/28)
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="convex",
                  eps_primal=0.1, eps_dual=1.0, rho=2.0, max_iterations=10000, robustness=None):
