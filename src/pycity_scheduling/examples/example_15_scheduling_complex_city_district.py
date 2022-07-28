@@ -101,7 +101,8 @@ def main(do_plot=False):
     }
 
     # Finally, create the desired city district using the factory's "generate_tabula_district" method. The district's
-    # district operator's objective is defined as "peak-shaving" and the buildings' objectives are defined as "price".
+    # district operator's objective is defined as "price" (i.e., day-ahead prices) and the buildings' objectives are
+    # also defined as "price" (i.e., time-of-use prices).
     district = factory.generate_tabula_district(env, num_sfh, num_mfh,
                                                 sfh_distribution,
                                                 sfh_heating_distribution,
@@ -109,7 +110,7 @@ def main(do_plot=False):
                                                 mfh_distribution,
                                                 mfh_heating_distribution,
                                                 mfh_device_probs,
-                                                district_objective='peak-shaving',
+                                                district_objective='price',
                                                 building_objective='price'
                                                 )
 
