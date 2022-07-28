@@ -28,6 +28,7 @@ import functools
 
 class MPIInterface:
     def __init__(self):
+        self.mpi = None
         self.mpi_comm = None
         self.mpi_rank = 0
         self.mpi_size = 1
@@ -53,9 +54,10 @@ class MPIInterface:
         """
         Turn off printing for all MPI processes with MPI rank other than 0 and always flush prints for rank 0.
         """
-        if self.mpi_rank > 0:
-            sys.stdout = open(os.devnull, 'w')
-            sys.stderr = open(os.devnull, 'w')
-        else:
-            sys.stdout = os.fdopen(sys.stdout.fileno(), 'a+', 1)
-            sys.stderr = os.fdopen(sys.stderr.fileno(), 'a+', 1)
+        if self.mpi is not None and self.mpi_size > 1:
+            if self.mpi_rank > 0:
+                sys.stdout = open(os.devnull, 'w')
+                sys.stderr = open(os.devnull, 'w')
+            else:
+                sys.stdout = os.fdopen(sys.stdout.fileno(), 'a+', 1)
+                sys.stderr = os.fdopen(sys.stderr.fileno(), 'a+', 1)
