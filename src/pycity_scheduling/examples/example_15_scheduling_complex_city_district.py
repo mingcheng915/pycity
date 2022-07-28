@@ -32,7 +32,7 @@ from pycity_scheduling.classes import *
 
 
 # In this example, the power schedule for a complex city district scenario is determined. The scenario is built upon the
-# district setup as defined in example 'example_12_district_generator.py', but it contains more than 100 buildings and
+# district setup as defined in example 'example_13_district_generator.py', but it contains more than 100 buildings and
 # is hence considered more complex.
 
 def main(do_plot=False):
@@ -100,7 +100,7 @@ def main(do_plot=False):
         'PV': 0.8,
     }
 
-    # Finally, create the desired city district using the factory's "generate_tabula_district" method. The district's/
+    # Finally, create the desired city district using the factory's "generate_tabula_district" method. The district's
     # district operator's objective is defined as "peak-shaving" and the buildings' objectives are defined as "price".
     district = factory.generate_tabula_district(env, num_sfh, num_mfh,
                                                 sfh_distribution,
@@ -109,7 +109,7 @@ def main(do_plot=False):
                                                 mfh_distribution,
                                                 mfh_heating_distribution,
                                                 mfh_device_probs,
-                                                district_objective='price',
+                                                district_objective='peak-shaving',
                                                 building_objective='price'
                                                 )
 
