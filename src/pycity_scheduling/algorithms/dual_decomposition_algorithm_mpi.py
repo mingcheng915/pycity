@@ -139,7 +139,8 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
     def _postsolve(self, results, params, debug):
         if self.mpi_interface.get_size() > 1:
             # Update all models across all MPI instances:
-            entity_schedules = [None for i in range(len(self.nodes))]
+            pyomo_var_values = dict()
+            asset_updates = np.empty(len(self.nodes), dtype=np.object)
             for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
                 if not isinstance(
                         entity,
@@ -147,23 +148,38 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
                 ):
                     continue
                 if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
-                    entity.update_schedule()
-                    for j in range(self.mpi_interface.get_size()):
-                        if j != self.mpi_interface.get_rank():
-                            entity_schedules[i] = entity.schedule
-                            req = self.mpi_interface.get_comm().isend(entity.schedule, dest=j, tag=i)
-                            req.wait()
-                else:
+                    for asset in entity.get_all_entities():
+                        for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
+                            pyomo_var_values[str(v)] = pyomo.value(v)
+                    asset_updates[i] = pyomo_var_values
+
+            if self.mpi_interface.get_rank() == 0:
+                for i in range(1, len(self.nodes)):
                     req = self.mpi_interface.get_comm().irecv(source=self.mpi_process_range[i], tag=i)
-                    data = req.wait()
-                    entity_schedules[i] = data
+                    asset_updates[i] = req.wait()
+            else:
+                for i in range(1, len(self.nodes)):
+                    if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
+                        req = self.mpi_interface.get_comm().isend(asset_updates[i], dest=0, tag=i)
+                        req.wait()
+                asset_updates = np.empty(len(self.nodes), dtype=np.object)
+            asset_updates = self.mpi_interface.get_comm().bcast(asset_updates, root=0)
+
             for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
                 if not isinstance(
                         entity,
                         (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
                 ):
                     continue
-                self.entities[i].load_schedule_from_dict(entity_schedules[i])
+
+                for asset in entity.get_all_entities():
+                    pyomo_var_values_map = pyomo.ComponentMap()
+                    for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
+                        if str(v) in asset_updates[i]:
+                            pyomo_var_values_map[v] = pyomo.value(asset_updates[i][str(v)])
+                    for var in pyomo_var_values_map:
+                        var.set_value(pyomo_var_values_map[var])
+                    asset.update_schedule()
         else:
             super()._postsolve(results, params, debug)
         return
