@@ -82,53 +82,56 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
         self.eps_primal = eps_primal
         self.rho = rho
         self.max_iterations = max_iterations
-        # create solver nodes for each entity
-        self.nodes = [
-            SolverNode(solver, solver_options, [entity], mode, robustness=robustness)
-            for entity in self.entities
-        ]
+        self.op_horizon = self.city_district.op_horizon
+
+        # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
+        self._entities = [entity for entity in self.entities if
+                          isinstance(entity, (CityDistrict, Building, Photovoltaic, WindEnergyConverter))]
+
+        # Create a solver node for each entity
+        self.nodes = [SolverNode(solver, solver_options, [entity], mode, robustness=robustness)
+                      for entity in self._entities]
 
         # Determine which MPI processes is responsible for which node(s):
-        if self.mpi_interface.get_size() > len(self.nodes):
-            mpi_process_range = np.array([i for i in range(len(self.nodes))])
-        elif self.mpi_interface.mpi_size < len(self.nodes):
+        if self.mpi_interface.get_size() > len(self._entities):
+            mpi_process_range = np.array([i for i in range(len(self._entities))])
+        elif self.mpi_interface.mpi_size < len(self._entities):
             if self.mpi_interface.get_size() == 1:
-                mpi_process_range = np.array([0 for i in range(len(self.nodes))])
+                mpi_process_range = np.array([0 for i in range(len(self._entities))])
             else:
-                a, b = divmod(len(self.nodes) - 1, self.mpi_interface.get_size() - 1)
+                a, b = divmod(len(self._entities) - 1, self.mpi_interface.get_size() - 1)
                 mpi_process_range = np.repeat(np.array([i for i in range(1, self.mpi_interface.get_size())]), a)
                 for i in range(b):
                     mpi_process_range = np.append(mpi_process_range, i + 1)
                 mpi_process_range = np.concatenate([[0], mpi_process_range])
         else:
-            mpi_process_range = np.array([i for i in range(len(self.nodes))])
+            mpi_process_range = np.array([i for i in range(len(self._entities))])
         self.mpi_process_range = np.sort(mpi_process_range)
 
-        # create pyomo parameters for each entity
-        for node, entity in zip(self.nodes, self.entities):
+        # Create pyomo parameters for each entity
+        for node, entity in zip(self.nodes, self._entities):
             node.model.beta = pyomo.Param(mutable=True, initialize=1)
             node.model.lambdas = pyomo.Param(entity.model.t, mutable=True, initialize=0)
         self._add_objective()
 
     def _add_objective(self):
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             obj = node.model.beta * entity.get_objective()
             if i == 0:
                 # penalty term is expanded and constant is omitted
                 # invert sign of p_el_schedule and p_el_vars (omitted for quadratic
                 # term)
-                for t in range(entity.op_horizon):
+                for t in range(self.op_horizon):
                     obj -= node.model.lambdas[t] * entity.model.p_el_vars[t]
             else:
-                for t in range(entity.op_horizon):
+                for t in range(self.op_horizon):
                     obj += node.model.lambdas[t] * entity.model.p_el_vars[t]
             node.model.o = pyomo.Objective(expr=obj)
         return
 
     def _presolve(self, full_update, beta, robustness, debug):
         results, params = super()._presolve(full_update, beta, robustness, debug)
-
-        for node, entity in zip(self.nodes, self.entities):
+        for node, entity in zip(self.nodes, self._entities):
             node.model.beta = self._get_beta(params, entity)
             if full_update:
                 node.full_update(robustness)
@@ -140,13 +143,8 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
         if self.mpi_interface.get_size() > 1:
             # Update all models across all MPI instances:
             pyomo_var_values = dict()
-            asset_updates = np.empty(len(self.nodes), dtype=np.object)
-            for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
-                if not isinstance(
-                        entity,
-                        (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-                ):
-                    continue
+            asset_updates = np.empty(len(self._entities), dtype=np.object)
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
                 if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                     for asset in entity.get_all_entities():
                         for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
@@ -154,24 +152,18 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
                     asset_updates[i] = pyomo_var_values
 
             if self.mpi_interface.get_rank() == 0:
-                for i in range(1, len(self.nodes)):
+                for i in range(1, len(self._entities)):
                     req = self.mpi_interface.get_comm().irecv(source=self.mpi_process_range[i], tag=i)
                     asset_updates[i] = req.wait()
             else:
-                for i in range(1, len(self.nodes)):
+                for i in range(1, len(self._entities)):
                     if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                         req = self.mpi_interface.get_comm().isend(asset_updates[i], dest=0, tag=i)
                         req.wait()
-                asset_updates = np.empty(len(self.nodes), dtype=np.object)
+                asset_updates = np.empty(len(self._entities), dtype=np.object)
             asset_updates = self.mpi_interface.get_comm().bcast(asset_updates, root=0)
 
-            for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
-                if not isinstance(
-                        entity,
-                        (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-                ):
-                    continue
-
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
                 for asset in entity.get_all_entities():
                     pyomo_var_values_map = pyomo.ComponentMap()
                     for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
@@ -191,9 +183,8 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
 
     def _iteration(self, results, params, debug):
         super(DualDecompositionMPI, self)._iteration(results, params, debug)
-        op_horizon = self.entities[0].op_horizon
         if "lambdas" not in params:
-            params["lambdas"] = np.zeros(op_horizon)
+            params["lambdas"] = np.zeros(self.op_horizon)
         lambdas = params["lambdas"]
 
         # ------------------------------------------
@@ -202,48 +193,36 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
         to_solve_nodes = []
         variables = []
 
-        p_el_schedules = np.empty((len(self.entities), op_horizon))
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        p_el_schedules = np.empty((len(self._entities), self.op_horizon))
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
-                if not isinstance(
-                        entity,
-                        (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-                ):
-                    continue
-
-                for t in range(op_horizon):
+                for t in range(self.op_horizon):
                     node.model.lambdas[t] = lambdas[t]
                 node.obj_update()
                 to_solve_nodes.append(node)
-                variables.append([entity.model.p_el_vars[t] for t in range(op_horizon)])
+                variables.append([entity.model.p_el_vars[t] for t in range(self.op_horizon)])
         self._solve_nodes(results, params, to_solve_nodes, variables=variables, debug=debug)
 
         if self.mpi_interface.get_rank() == 0:
-            p_el_schedules[0] = np.array(extract_pyomo_values(self.entities[0].model.p_el_vars, float),
+            p_el_schedules[0] = np.array(extract_pyomo_values(self.city_district.model.p_el_vars, float),
                                          dtype=np.float64)
-        for j in range(1, len(self.nodes)):
-            if not isinstance(
-                    self.entities[j],
-                    (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-            ):
-                continue
-
+        for j in range(1, len(self._entities)):
             if self.mpi_interface.get_rank() == 0:
                 if self.mpi_interface.get_size() > 1:
-                    data = np.empty(op_horizon, dtype=np.float64)
+                    data = np.empty(self.op_horizon, dtype=np.float64)
                     self.mpi_interface.get_comm().Recv(data, source=self.mpi_process_range[j],
-                                                       tag=int(results["iterations"][-1]) * len(self.nodes) + j)
+                                                       tag=int(results["iterations"][-1]) * len(self._entities) + j)
                     p_el_schedules[j] = np.array(data, dtype=np.float64)
                 else:
-                    p_el_schedules[j] = np.array(extract_pyomo_values(self.entities[j].model.p_el_vars, float),
+                    p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
                                                  dtype=np.float64)
             else:
                 if self.mpi_interface.get_rank() == self.mpi_process_range[j]:
-                    p_el_schedules[j] = np.array(extract_pyomo_values(self.entities[j].model.p_el_vars, float),
+                    p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
                                                  dtype=np.float64)
                     if self.mpi_interface.get_size() > 1:
                         self.mpi_interface.get_comm().Send(p_el_schedules[j], dest=0,
-                                                           tag=int(results["iterations"][-1]) * len(self.nodes) + j)
+                                                           tag=int(results["iterations"][-1]) * len(self._entities) + j)
 
         # ------------------------------------------
         # 2) Calculate incentive signal update
@@ -251,12 +230,12 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
         if self.mpi_interface.get_rank() == 0:
             lambdas -= self.rho * p_el_schedules[0]
             lambdas += self.rho * np.sum(p_el_schedules[1:], axis=0)
-            r = np.zeros(op_horizon)
+            r = np.zeros(self.op_horizon)
             r -= p_el_schedules[0]
             r += np.sum(p_el_schedules[1:], axis=0)
         else:
-            lambdas = np.empty(op_horizon, dtype=np.float64)
-            r = np.empty(op_horizon, dtype=np.float64)
+            lambdas = np.empty(self.op_horizon, dtype=np.float64)
+            r = np.empty(self.op_horizon, dtype=np.float64)
         if self.mpi_interface.get_size() > 1:
             self.mpi_interface.get_comm().Bcast(lambdas, root=0)
             self.mpi_interface.get_comm().Bcast(r, root=0)

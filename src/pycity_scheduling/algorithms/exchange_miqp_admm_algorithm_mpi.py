@@ -95,49 +95,52 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         super(ExchangeMIQPADMMMPI, self).__init__(city_district, solver, solver_options, mode)
 
         self.mpi_interface = mpi_interface
-
-        self.city_district = city_district
         self.mode = mode
         self.x_update_mode = x_update_mode
         self.eps_primal = eps_primal
         self.eps_dual = eps_dual
         self.eps_primal_i = eps_primal_i
         self.eps_dual_i = eps_dual_i
+        self.rho = rho
         self.max_iterations = max_iterations
-        self.counter = 0
-        # create solver nodes for each entity
-        self.nodes = [
-            SolverNode(solver, solver_options, [entity], mode, robustness=robustness)
-            for entity in self.entities
-        ]
+        self.iteration_counter = 0
+        self.op_horizon = self.city_district.op_horizon
+
+        # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
+        self._entities = [entity for entity in self.entities if
+                          isinstance(entity, (CityDistrict, Building, Photovoltaic, WindEnergyConverter))]
+
+        # Create a solver node for each entity
+        self.nodes = [SolverNode(solver, solver_options, [entity], mode, robustness=robustness)
+                      for entity in self._entities]
 
         # Determine which MPI processes is responsible for which node(s):
-        if self.mpi_interface.get_size() > len(self.nodes):
-            mpi_process_range = np.array([i for i in range(len(self.nodes))])
-        elif self.mpi_interface.get_size() < len(self.nodes):
+        if self.mpi_interface.get_size() > len(self._entities):
+            mpi_process_range = np.array([i for i in range(len(self._entities))])
+        elif self.mpi_interface.get_size() < len(self._entities):
             if self.mpi_interface.get_size() == 1:
-                mpi_process_range = np.array([0 for i in range(len(self.nodes))])
+                mpi_process_range = np.array([0 for i in range(len(self._entities))])
             else:
-                a, b = divmod(len(self.nodes) - 1, self.mpi_interface.get_size() - 1)
+                a, b = divmod(len(self._entities) - 1, self.mpi_interface.get_size() - 1)
                 mpi_process_range = np.repeat(np.array([i for i in range(1, self.mpi_interface.get_size())]), a)
                 for i in range(b):
                     mpi_process_range = np.append(mpi_process_range, i + 1)
                 mpi_process_range = np.concatenate([[0], mpi_process_range])
         else:
-            mpi_process_range = np.array([i for i in range(len(self.nodes))])
+            mpi_process_range = np.array([i for i in range(len(self._entities))])
         self.mpi_process_range = np.sort(mpi_process_range)
 
-        # load data from the model
+        # Load data from the model
         self.constraint_list = self._get_constraints()
         self.variable_list = self._get_variables()
-        self.op_horizon = self.entities[0].op_horizon
-        # create pyomo parameters for each entity
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+
+        # Create pyomo parameters for each entity
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             node.model.beta = pyomo.Param(mutable=True, initialize=1)
             node.model.x_exch_ = pyomo.Param(entity.model.t, mutable=True, initialize=0)
             node.model.u_exch = pyomo.Param(entity.model.t, mutable=True, initialize=0)
             node.model.last_p_el_schedules = pyomo.Param(entity.model.t, mutable=True, initialize=0)
-            node.model.rho = pyomo.Param(mutable=True, initialize=rho, within=pyomo.Reals)
+
         # Lists that contain the dual parameters of all subsystems
         self.x_k, self.u_var, self.u_constr, self.v_k = self._set_parameters()
         self._add_objective()
@@ -147,8 +150,8 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
     # The data structure in which the variables are stored is shown graphically in "data_structure.pdf"
     def _get_variables(self):
         variable_list = np.empty(shape=0)
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
-            binaries_list = Variables(self.entities[0].op_horizon)
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
+            binaries_list = Variables(self.op_horizon)
             if i != 0:
                 for en in entity.get_all_entities():
                     for variable in en.model.component_objects(pyomo.Var):
@@ -165,10 +168,10 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
     def _get_constraints(self):
         # List that contains the dictionaries that store the specified constr_lists of each node
         constraint_list = np.empty(shape=0)
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             node_dict = {}
-            equality_constr_list = Constraints(self.entities[0].op_horizon)
-            inequality_constr_list = Constraints(self.entities[0].op_horizon)
+            equality_constr_list = Constraints(self.op_horizon)
+            inequality_constr_list = Constraints(self.op_horizon)
             if i != 0:
                 for en in entity.get_all_entities():
                     for constraint in en.model.component_objects(pyomo.Constraint):
@@ -214,13 +217,13 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         u_constr_param = np.empty(shape=0)
         # dual parameter for the ADMM method for inequality constrained optimization
         v_k_param = np.empty(shape=0)
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             node_dict = {}
-            x_k_binaries_list = Variables(self.entities[0].op_horizon)
-            u_binaries_list = Variables(self.entities[0].op_horizon)
-            u_eq_list = Constraints(self.entities[0].op_horizon)
-            u_ineq_list = Constraints(self.entities[0].op_horizon)
-            v_k_list = Constraints(self.entities[0].op_horizon)
+            x_k_binaries_list = Variables(self.op_horizon)
+            u_binaries_list = Variables(self.op_horizon)
+            u_eq_list = Constraints(self.op_horizon)
+            u_ineq_list = Constraints(self.op_horizon)
+            v_k_list = Constraints(self.op_horizon)
             if i != 0:
                 length = self.variable_list[i].get_length()
                 if length != 0:
@@ -269,53 +272,53 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         return x_k_param, u_var_param, u_constr_param, v_k_param
 
     def _add_objective(self):
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             obj = node.model.beta * entity.get_objective()
-            for j in range(entity.op_horizon):
-                obj += node.model.rho / 2 * entity.model.p_el_vars[j] * entity.model.p_el_vars[j]
+            for j in range(self.op_horizon):
+                obj += self.rho / 2 * entity.model.p_el_vars[j] * entity.model.p_el_vars[j]
             # penalty term is expanded and constant is omitted
             if i == 0:
                 # invert sign of p_el_schedule and p_el_vars (omitted for quadratic term)
                 penalty = [(-node.model.last_p_el_schedules[t] - node.model.x_exch_[t] - node.model.u_exch[t])
-                           for t in range(entity.op_horizon)]
-                for j in range(entity.op_horizon):
-                    obj += node.model.rho * penalty[j] * entity.model.p_el_vars[j]
+                           for t in range(self.op_horizon)]
+                for j in range(self.op_horizon):
+                    obj += self.rho * penalty[j] * entity.model.p_el_vars[j]
             else:
                 penalty = [(-node.model.last_p_el_schedules[t] + node.model.x_exch_[t] + node.model.u_exch[t])
-                           for t in range(entity.op_horizon)]
-                for j in range(entity.op_horizon):
-                    obj += node.model.rho * penalty[j] * entity.model.p_el_vars[j]
+                           for t in range(self.op_horizon)]
+                for j in range(self.op_horizon):
+                    obj += self.rho * penalty[j] * entity.model.p_el_vars[j]
                 # Empirically the following term worsens the convergence of the algorithm in the unconstrained mode
                 # although it belongs to the mathematical formulation of the algorithm. Therefore, it is only used in
                 # constrained mode
                 # Todo: Double check what happens to unconstrained variant
                 if self.x_update_mode == 'constrained':
-                    for t in range(entity.op_horizon):
+                    for t in range(self.op_horizon):
                         a = self.variable_list[i].get_list(t)
                         b = self.x_k[i].get_list(t)
                         c = self.u_var[i].get_list(t)
                         expr = sum((x - x_k + u_k) ** 2 for x, x_k, u_k in zip(a, b, c))
-                        obj += node.model.rho / 2 * expr
+                        obj += self.rho / 2 * expr
 
                 if self.x_update_mode == 'unconstrained':
                     # constraint entries of the augmented term
-                    for t in range(entity.op_horizon + 1):
+                    for t in range(self.op_horizon + 1):
                         a = self.constraint_list[i]["equality_constr"].get_list(t)
                         b = self.u_constr[i]["equality_constr"].get_list(t)
                         expr = sum((c + p) ** 2 for c, p in zip(a, b))
-                        obj += node.model.rho / 2 * expr
+                        obj += self.rho / 2 * expr
                         a = self.constraint_list[i]["inequality_constr"].get_list(t)
                         b = self.u_constr[i]["inequality_constr"].get_list(t)
                         c = self.v_k[i].get_list(t)
                         expr = sum((constraint + u_k - v_k) ** 2 for constraint, u_k, v_k in zip(a, b, c))
-                        obj += node.model.rho / 2 * expr
+                        obj += self.rho / 2 * expr
             node.model.o = pyomo.Objective(expr=obj)
         return
 
     # returns the average of the primal residual of subsystem i
     def primal_residual(self):
         primal_list = []
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                 r_i_t = np.empty(shape=0)
                 for t in range(self.op_horizon + 1):
@@ -332,14 +335,14 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
             entry = self.variable_list[i].get_list_values(t) - self.x_k[i].get_list_values(t)
             s_i_t = np.append(s_i_t, entry)
             dual += np.linalg.norm(s_i_t)
-        dual = node.model.rho.value * dual / self.op_horizon
+        dual = self.rho * dual / self.op_horizon
         return dual
 
     # Implementation of the projection function Pi
     def _pi(self):
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
-                for t in range(entity.op_horizon):
+                for t in range(self.op_horizon):
                     x_old = self.variable_list[i].get_list_values(t)
                     x_new = x_old + self.u_var[i].get_list_values(t)
                     # round the binary variables on 0 or 1
@@ -357,7 +360,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         results, params = super()._presolve(full_update, beta, robustness, debug)
         results["r_norms"] = []
         results["s_norms"] = []
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             node.model.beta = self._get_beta(params, entity)
             if full_update:
                 node.full_update(robustness)
@@ -377,13 +380,8 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         if self.mpi_interface.get_size() > 1:
             # Update all models across all MPI instances:
             pyomo_var_values = dict()
-            asset_updates = np.empty(len(self.nodes), dtype=np.object)
-            for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
-                if not isinstance(
-                        entity,
-                        (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-                ):
-                    continue
+            asset_updates = np.empty(len(self._entities), dtype=np.object)
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
                 if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                     for asset in entity.get_all_entities():
                         for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
@@ -391,24 +389,18 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                     asset_updates[i] = pyomo_var_values
 
             if self.mpi_interface.get_rank() == 0:
-                for i in range(1, len(self.nodes)):
+                for i in range(1, len(self._entities)):
                     req = self.mpi_interface.get_comm().irecv(source=self.mpi_process_range[i], tag=i)
                     asset_updates[i] = req.wait()
             else:
-                for i in range(1, len(self.nodes)):
+                for i in range(1, len(self._entities)):
                     if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                         req = self.mpi_interface.get_comm().isend(asset_updates[i], dest=0, tag=i)
                         req.wait()
-                asset_updates = np.empty(len(self.nodes), dtype=np.object)
+                asset_updates = np.empty(len(self._entities), dtype=np.object)
             asset_updates = self.mpi_interface.get_comm().bcast(asset_updates, root=0)
 
-            for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
-                if not isinstance(
-                        entity,
-                        (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-                ):
-                    continue
-
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
                 for asset in entity.get_all_entities():
                     pyomo_var_values_map = pyomo.ComponentMap()
                     for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
@@ -423,12 +415,12 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
 
     # returns the objective value
     def _get_objective(self):
-        obj_value_list = np.zeros(len(self.nodes), dtype=np.float64)
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        obj_value_list = np.zeros(len(self._entities), dtype=np.float64)
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                 obj_value_list[i] = pyomo.value(entity.get_objective())
         if self.mpi_interface.mpi_size > 1:
-            tmp = np.zeros(len(self.nodes), dtype=np.float64)
+            tmp = np.zeros(len(self._entities), dtype=np.float64)
             self.mpi_interface.get_comm().Allreduce(obj_value_list, tmp, self.mpi_interface.mpi.SUM)
             obj_value_list = tmp
         obj_value = np.sum(obj_value_list)
@@ -440,7 +432,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
             return True
         primal = np.zeros(1, dtype=np.float64)
         dual = np.zeros(1, dtype=np.float64)
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.mpi_size > 1:
                 if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                     primal[0] += results["r_i_norms_" + str(i)][-1]
@@ -458,8 +450,8 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
             total_dual = dual
 
         # average of all dual updates
-        primal = total_primal[0] / (len(self.nodes) - 1)
-        dual = total_dual[0] / (len(self.nodes) - 1)
+        primal = total_primal[0] / (len(self._entities) - 1)
+        dual = total_dual[0] / (len(self._entities) - 1)
         results["r_sub_ave"].append(primal)
         results["s_sub_ave"].append(dual)
 
@@ -472,16 +464,15 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
 
     def _iteration(self, results, params, debug):
         super(ExchangeMIQPADMMMPI, self)._iteration(results, params, debug)
-        op_horizon = self.entities[0].op_horizon
-        self.counter += 1
+        self.iteration_counter += 1
 
         # fill parameters if not already present
         if "p_el" not in params:
-            params["p_el"] = np.zeros((len(self.entities), op_horizon))
+            params["p_el"] = np.zeros((len(self._entities), self.op_horizon))
         if "x_" not in params:
-            params["x_"] = np.zeros(op_horizon)
+            params["x_"] = np.zeros(self.op_horizon)
         if "u" not in params:
-            params["u"] = np.zeros(op_horizon)
+            params["u"] = np.zeros(self.op_horizon)
         u = params["u"]
 
         # -----------------
@@ -489,17 +480,17 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         # -----------------
         to_solve_nodes = []
         variables = []
-        p_el_schedules = np.empty((len(self.entities), op_horizon))
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        p_el_schedules = np.empty((len(self._entities), self.op_horizon))
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                 # for each subsystem, dual variables for the constraints have to be created
                 dual = "u_bin_" + str(i)
                 if dual not in params:
-                    params[dual] = np.zeros((op_horizon, self.variable_list[i].get_length()))
+                    params[dual] = np.zeros((self.op_horizon, self.variable_list[i].get_length()))
                 # for each subsystem the solution of the descision variables have to be stored for the next iteration
                 x_descision = "x_bin_" + str(i)
                 if x_descision not in params:
-                    params[x_descision] = np.zeros((op_horizon, self.variable_list[i].get_length()))
+                    params[x_descision] = np.zeros((self.op_horizon, self.variable_list[i].get_length()))
 
                 # Dual variables for the constraints
                 if self.x_update_mode == 'unconstrained':
@@ -513,13 +504,8 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                     if dual not in params:
                         params[dual] = self.u_constr[i]["inequality_constr"].get_initial_list()
 
-                if not isinstance(
-                        entity,
-                        (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-                ):
-                    continue
                 # set all parameters
-                for t in range(op_horizon):
+                for t in range(self.op_horizon):
                     node.model.last_p_el_schedules[t] = params["p_el"][i][t]
                     node.model.x_exch_[t] = params["x_"][t]
                     node.model.u_exch[t] = params["u"][t]
@@ -528,7 +514,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                     variables.append(self.variable_list[i].get_list(t))
 
                 if self.x_update_mode == 'unconstrained':
-                    for t in range(op_horizon + 1):
+                    for t in range(self.op_horizon + 1):
                         self.u_constr[i]["equality_constr"].set_list_values(params["u_eq_constr_" + str(i)][t], t)
                         self.u_constr[i]["inequality_constr"].set_list_values(params["u_ineq_constr_" + str(i)][t], t)
                         self.v_k[i].set_list_values(params["v_k_" + str(i)][t], t)
@@ -536,16 +522,16 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                 # set objective of the node
                 node.obj_update()
                 to_solve_nodes.append(node)
-                variables.append([entity.model.p_el_vars[t] for t in range(op_horizon)])
-            self._solve_nodes(results, params, to_solve_nodes, variables=variables, debug=debug)
+                variables.append([entity.model.p_el_vars[t] for t in range(self.op_horizon)])
+                self._solve_nodes(results, params, to_solve_nodes, variables=variables, debug=debug)
 
         # --------------------------
         # 2) incentive signal update
         # --------------------------
         # update all dual variables of subsystems
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
-                for t in range(op_horizon):
+                for t in range(self.op_horizon):
                     x_bin = self.variable_list[i].get_list_values(t)
                     x_k_bin = self.x_k[i].get_list_values(t)
                     u_k_bin = self.u_var[i].get_list_values(t)
@@ -553,7 +539,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
 
                 if self.x_update_mode == 'unconstrained':
                     # constraint duals have the none index as an additional time index
-                    for t in range(op_horizon + 1):
+                    for t in range(self.op_horizon + 1):
                         eq_constr = self.constraint_list[i]["equality_constr"].get_list_values(t)
                         ineq_constr = self.constraint_list[i]["inequality_constr"].get_list_values(t)
                         u_ineq_k = self.u_constr[i]["inequality_constr"].get_list_values(t)
@@ -570,7 +556,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         self._pi()
 
         # Calculate all residual norms of subsystems. Norm the residuals by T
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                 primal = np.linalg.norm(primal_list[0])
                 primal = primal / self.op_horizon
@@ -579,45 +565,39 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
 
         # exchange dual update
         if self.mpi_interface.get_rank() == 0:
-            p_el_schedules[0] = np.array(extract_pyomo_values(self.entities[0].model.p_el_vars, float),
+            p_el_schedules[0] = np.array(extract_pyomo_values(self.city_district.model.p_el_vars, float),
                                          dtype=np.float64)
-        for j in range(1, len(self.nodes)):
-            if not isinstance(
-                    self.entities[j],
-                    (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-            ):
-                continue
-
+        for j in range(1, len(self._entities)):
             if self.mpi_interface.get_rank() == 0:
                 if self.mpi_interface.get_size() > 1:
-                    data = np.empty(op_horizon, dtype=np.float64)
+                    data = np.empty(self.op_horizon, dtype=np.float64)
                     self.mpi_interface.get_comm().Recv(
                         data,
                         source=self.mpi_process_range[j],
-                        tag=int(self.counter) * len(self.mpi_process_range) + j
+                        tag=int(self.iteration_counter) * len(self.mpi_process_range) + j
                     )
                     p_el_schedules[j] = np.array(data, dtype=np.float64)
                 else:
-                    p_el_schedules[j] = np.array(extract_pyomo_values(self.entities[j].model.p_el_vars, float),
+                    p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
                                                  dtype=np.float64)
             else:
                 if self.mpi_interface.get_rank() == self.mpi_process_range[j]:
-                    p_el_schedules[j] = np.array(extract_pyomo_values(self.entities[j].model.p_el_vars, float),
+                    p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
                                                  dtype=np.float64)
                     if self.mpi_interface.get_size() > 1:
                         self.mpi_interface.get_comm().Send(
                             p_el_schedules[j],
                             dest=0,
-                            tag=int(self.counter) * len(self.mpi_process_range) + j
+                            tag=int(self.iteration_counter) * len(self.mpi_process_range) + j
                         )
 
         if self.mpi_interface.get_rank() == 0:
-            x_ = (-p_el_schedules[0] + sum(p_el_schedules[1:])) / len(self.entities)
+            x_ = (-p_el_schedules[0] + sum(p_el_schedules[1:])) / len(self._entities)
             u += x_
         else:
             x_ = np.empty(self.op_horizon, dtype=np.float64)
             u = np.empty(self.op_horizon, dtype=np.float64)
-            p_el_schedules = np.empty((len(self.entities), op_horizon), dtype=np.float64)
+            p_el_schedules = np.empty((len(self._entities), self.op_horizon), dtype=np.float64)
         if self.mpi_interface.get_size() > 1:
             self.mpi_interface.get_comm().Bcast(x_, root=0)
             self.mpi_interface.get_comm().Bcast(u, root=0)
@@ -629,11 +609,11 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         if self.mpi_interface.get_rank() == 0:
             r_norm = np.array([np.linalg.norm(x_)], dtype=np.float64)
             s = np.zeros_like(p_el_schedules)
-            for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
                 if i == 0:
-                    s[i] = - node.model.rho.value * (-p_el_schedules[0] + params["p_el"][0] + params["x_"] - x_)
+                    s[i] = - self.rho * (-p_el_schedules[0] + params["p_el"][0] + params["x_"] - x_)
                 else:
-                    s[i] = - node.model.rho.value * (p_el_schedules[i] - params["p_el"][i] + params["x_"] - x_)
+                    s[i] = - self.rho * (p_el_schedules[i] - params["p_el"][i] + params["x_"] - x_)
             s_norm = np.array([np.linalg.norm(s.flatten())], dtype=np.float64)
         else:
             r_norm = np.empty(1, dtype=np.float64)
@@ -652,7 +632,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         params["p_el"] = p_el_schedules
         params["x_"] = x_
         params["u"] = u
-        for i in range(len(self.nodes)):
+        for i in range(len(self._entities)):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                 params["x_bin_" + str(i)] = self.variable_list[i].get_initial_data()
 
@@ -676,7 +656,7 @@ class Variables:
     def __init__(self, op_horizon):
         self.x = {}
         self.op_horizon = op_horizon
-        for i in range(op_horizon):
+        for i in range(self.op_horizon):
             name = "t_" + str(i)
             self.x[name] = np.empty(shape=0)
 
@@ -758,7 +738,7 @@ class Constraints:
     def __init__(self, op_horizon):
         self.x = {}
         self.op_horizon = op_horizon
-        for i in range(op_horizon + 1):
+        for i in range(self.op_horizon + 1):
             name = "index_" + str(i)
             self.x[name] = np.empty(shape=0)
 

@@ -73,36 +73,40 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
         self.eps_primal = eps_primal
         self.rho = rho
         self.max_iterations = max_iterations
-        # create solver nodes for each entity
-        self.nodes = [
-            SolverNode(solver, solver_options, [entity], mode, robustness=robustness)
-            for entity in self.entities
-        ]
-        # create pyomo parameters for each entity
-        for node, entity in zip(self.nodes, self.entities):
+        self.op_horizon = self.city_district.op_horizon
+
+        # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
+        self._entities = [entity for entity in self.entities if
+                          isinstance(entity, (CityDistrict, Building, Photovoltaic, WindEnergyConverter))]
+
+        # Create a solver node for each entity
+        self.nodes = [SolverNode(solver, solver_options, [entity], mode, robustness=robustness)
+                      for entity in self._entities]
+
+        # Create pyomo parameters for each entity
+        for node, entity in zip(self.nodes, self._entities):
             node.model.beta = pyomo.Param(mutable=True, initialize=1)
             node.model.lambdas = pyomo.Param(entity.model.t, mutable=True, initialize=0)
         self._add_objective()
 
     def _add_objective(self):
-        for i, node, entity in zip(range(len(self.entities)), self.nodes, self.entities):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             obj = node.model.beta * entity.get_objective()
             if i == 0:
                 # penalty term is expanded and constant is omitted
                 # invert sign of p_el_schedule and p_el_vars (omitted for quadratic
                 # term)
-                for t in range(entity.op_horizon):
+                for t in range(self.op_horizon):
                     obj -= node.model.lambdas[t] * entity.model.p_el_vars[t]
             else:
-                for t in range(entity.op_horizon):
+                for t in range(self.op_horizon):
                     obj += node.model.lambdas[t] * entity.model.p_el_vars[t]
             node.model.o = pyomo.Objective(expr=obj)
         return
 
     def _presolve(self, full_update, beta, robustness, debug):
         results, params = super()._presolve(full_update, beta, robustness, debug)
-
-        for node, entity in zip(self.nodes, self.entities):
+        for node, entity in zip(self.nodes, self._entities):
             node.model.beta = self._get_beta(params, entity)
             if full_update:
                 node.full_update(robustness)
@@ -117,36 +121,30 @@ class DualDecomposition(IterationAlgorithm, DistributedAlgorithm):
 
     def _iteration(self, results, params, debug):
         super(DualDecomposition, self)._iteration(results, params, debug)
-        op_horizon = self.entities[0].op_horizon
         if "lambdas" not in params:
-            params["lambdas"] = np.zeros(op_horizon)
+            params["lambdas"] = np.zeros(self.op_horizon)
         lambdas = params["lambdas"]
 
         # ------------------------------------------
         # 1) Optimize all entities
         # ------------------------------------------
-        for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
-            if not isinstance(
-                    entity,
-                    (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
-            ):
-                continue
-            for t in range(op_horizon):
+        for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
+            for t in range(self.op_horizon):
                 node.model.lambdas[t] = lambdas[t]
             node.obj_update()
-            node.solve(variables=[entity.model.p_el_vars[t] for t in range(op_horizon)], debug=debug)
+            node.solve(variables=[entity.model.p_el_vars[t] for t in range(self.op_horizon)], debug=debug)
 
         # ------------------------------------------
         # 2) Calculate incentive signal update
         # ------------------------------------------
-        p_el_schedules = np.array([extract_pyomo_values(entity.model.p_el_vars, float) for entity in self.entities])
+        p_el_schedules = np.array([extract_pyomo_values(entity.model.p_el_vars, float) for entity in self._entities])
         lambdas -= self.rho * p_el_schedules[0]
         lambdas += self.rho * np.sum(p_el_schedules[1:], axis=0)
 
         # ------------------------------------------
         # 3) Calculate parameters for stopping criteria
         # ------------------------------------------
-        r = np.zeros(op_horizon)
+        r = np.zeros(self.op_horizon)
         r -= p_el_schedules[0]
         r += np.sum(p_el_schedules[1:], axis=0)
         results["r_norms"].append(np.linalg.norm(r, np.inf))
