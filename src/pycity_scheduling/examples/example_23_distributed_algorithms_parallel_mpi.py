@@ -66,13 +66,13 @@ def main(do_plot=False):
         'EH': 0.4,
     }
 
-    # All single-family houses are equipped with a fixed load, 20% have a deferrable load, and 30% have an electric
+    # All single-family houses are equipped with a fixed load, 0% have a deferrable load, and 30% have an electric
     # vehicle. Moreover, 50% of all single-family houses have a battery unit and 100% have a rooftop photovoltaic unit
     # installation.
     # The values are rounded in case they cannot be perfectly matched to the given number of buildings.
     sfh_device_probs = {
         'FL': 1,
-        'DL': 0.2,
+        'DL': 0.0,
         'EV': 0.3,
         'BAT': 0.5,
         'PV': 1.0,
@@ -95,13 +95,13 @@ def main(do_plot=False):
         'EH': 0.4,
     }
 
-    # All apartments inside a multi-family houses are equipped with a fixed load, 20% have a deferrable load, and 20%
+    # All apartments inside a multi-family houses are equipped with a fixed load, 0% have a deferrable load, and 20%
     # have an electric vehicle. Moreover, 40% of all multi-family houses have a battery unit and 100% have a rooftop
     # photovoltaic unit installation.
     # The values are rounded in case they cannot be perfectly matched to the given number of buildings.
     mfh_device_probs = {
         'FL': 1,
-        'DL': 0.2,
+        'DL': 0.0,
         'EV': 0.2,
         'BAT': 0.4,
         'PV': 1.0,
@@ -122,7 +122,7 @@ def main(do_plot=False):
                                                 )
 
     # Hierarchically print the district and all buildings/assets:
-    debug.print_district(district, 1)
+    debug.print_district(district, 2)
 
     # Perform the city district scheduling using the central optimization algorithm as a reference:
     print("\n### Central Algorithm ###\n")
@@ -131,7 +131,6 @@ def main(do_plot=False):
     district.copy_schedule("central")
 
     # Print the building's schedules and some metrics:
-    count = 1
     for building in district.get_lower_entities():
         print("Schedule building {}:".format(str(building)))
         print(list(building.p_el_schedule))
@@ -145,10 +144,9 @@ def main(do_plot=False):
     print("\n### Dual Decomposition Algorithm ###\n")
     opt = DualDecompositionMPI(district, mpi_interface, rho=0.1, eps_primal=0.01)
     results = opt.solve()
-    district.copy_schedule("dual_decomposition")
+    district.copy_schedule("dual-decomposition")
 
     # Print the building's schedules:
-    count = 1
     for building in district.get_lower_entities():
         print("Schedule building {}:".format(str(building)))
         print(list(building.p_el_schedule))
@@ -162,10 +160,26 @@ def main(do_plot=False):
     print("\n### Exchange ADMM Algorithm ###\n")
     opt = ExchangeADMMMPI(district, mpi_interface, rho=2.0, eps_primal=0.001, eps_dual=0.01)
     results = opt.solve()
-    district.copy_schedule("exchange_admm")
+    district.copy_schedule("exchange-admm")
 
     # Print the building's schedules:
-    count = 1
+    for building in district.get_lower_entities():
+        print("Schedule building {}:".format(str(building)))
+        print(list(building.p_el_schedule))
+    print("Schedule of the city district:")
+    print(list(district.p_el_schedule))
+    print("")
+    print("Self-consumption rate: {: >4.2f}".format(self_consumption(district)))
+    print("Autarky rate: {: >4.2f}".format(autarky(district)))
+
+    # Perform the city district scheduling using the Exchange MIQP ADMM optimization algorithm (constrained):
+    print("\n### Exchange MIQP ADMM Algorithm MPI (Constrained) ###\n")
+    opt = ExchangeMIQPADMMMPI(district, mpi_interface, mode='integer', x_update_mode='constrained', eps_primal=0.01,
+                              eps_dual=0.01, eps_primal_i=0.01, eps_dual_i=0.01)
+    results = opt.solve()
+    district.copy_schedule("exchange_miqp_admm-constrained")
+
+    # Print the building's schedules:
     for building in district.get_lower_entities():
         print("Schedule building {}:".format(str(building)))
         print(list(building.p_el_schedule))
