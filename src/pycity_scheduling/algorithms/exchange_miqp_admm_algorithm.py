@@ -84,7 +84,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
     ----------
     [1] "A simple effective heuristic for embedded mixed-integer quadratic programming"
     by Reza Takapoui, Nicholas Moehle, Stephen Boyd, and Alberto Bemporad
-    Online: https://web.stanford.edu/~boyd/papers/pdf/miqp_admm.pdf (accessed on 2022/07/28)
+    Online: https://web.stanford.edu/~boyd/papers/pdf/miqp_admm.pdf (accessed on 2022/07/29)
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="integer",
                  x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1, eps_dual_i=0.1,
@@ -496,7 +496,8 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         for i, node, entity in zip(range(len(self.nodes)), self.nodes, self.entities):
             if i == 0:
                 s[i] = - node.model.rho.value * (-p_el_schedules[0] + params["p_el"][0] + params["x_"] - x_)
-            s[i] = - node.model.rho.value * (p_el_schedules[i] - params["p_el"][i] + params["x_"] - x_)
+            else:
+                s[i] = - node.model.rho.value * (p_el_schedules[i] - params["p_el"][i] + params["x_"] - x_)
         results["s_norms"].append(np.linalg.norm(s.flatten()))
 
         # store the objective value
@@ -515,23 +516,16 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
 
 
 class Variables:
-    """Implementation of the data structure for the binary decision variables and their dual Variables.
-       For each time step, a numpy array is created in which the time indexed pyomo variables or parameters are stored.
-       The complete data structure is created in the class Exchange MIQP ADMM method _get_variables() and is
-       shown graphically in 'data_structure_exchange_miqp_admm.pdf'.
+    """
+    Implementation of the data structure for the binary decision variables and their dual Variables.
+    For each time step, a numpy array is created in which the time indexed pyomo variables or parameters are stored.
+    The complete data structure is created in the class Exchange MIQP ADMM method _get_variables() and is
+    shown graphically in 'data_structure_exchange_miqp_admm.pdf'.
 
     Parameters
     ----------
     op_horizon : int
         Number of simulation time steps
-    obj : Pyomo Var or Pyomo Param
-        Pyomo object is to append on a time indexed numpy array
-    length: int
-        Length of a numpy array containing pyomo Variables or Parameters
-    time_steo: int
-        Needed to call a Variables array of a specific time step
-    new_values: numpy array
-        Array of values that should replace the actual values of a Variables array of a specific time step
     """
     # In the constructor, an empty numpy array is created for the class Variable object for each time step
     def __init__(self, op_horizon):
@@ -603,23 +597,16 @@ class Variables:
 # class creates a data structure for the pyomo constraints and parameters that belong to constraints
 # Compared to variables, the constraints have an additional time index "NONE"
 class Constraints:
-    """Implementation of the data structure for the constraints and their dual Variables.
-       For each time step a numpy array is created in which the time indexed pyomo expressions or Parameters are stored.
-       The complete data structure is created in the class Exchange MIQP ADMM method _get_constraints() and is
-       shown graphically in 'data_structure_exchange_miqp_admm.pdf'.
+    """
+    Implementation of the data structure for the constraints and their dual Variables.
+    For each time step a numpy array is created in which the time indexed pyomo expressions or Parameters are stored.
+    The complete data structure is created in the class Exchange MIQP ADMM method _get_constraints() and is
+    shown graphically in 'data_structure_exchange_miqp_admm.pdf'.
 
     Parameters
     ----------
     op_horizon : int
         Number of simulation time steps
-    obj : Pyomo Expression or Pyomo Parameter
-        Pyomo object is to append on a time indexed numpy array
-    length: int
-        Length of a numpy array containing pyomo Expressions or Parameters
-    index: int or None
-        Needed to call a Constraints array of a specific time step
-    new_values: numpy array
-        Array of values that should replace the actual values of a Constraints array of a specific time step
     """
     # Constructor: An empty numpy array is created for the Constraint object for each time step and the None index
     # From now on: time index means the time steps plus the None index (t_1, t_2, ... , t_n, None)
