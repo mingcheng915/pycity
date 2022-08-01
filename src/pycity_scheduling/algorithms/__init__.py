@@ -30,7 +30,9 @@ from .central_optimization_algorithm import CentralOptimization
 from .dual_decomposition_algorithm import DualDecomposition
 from .dual_decomposition_algorithm_mpi import DualDecompositionMPI
 from .exchange_miqp_admm_algorithm import ExchangeMIQPADMM
+from .exchange_miqp_admm_algorithm_mpi import ExchangeMIQPADMMMPI
 from .exchange_miqp_admm_unconstrained_light import ExchangeMIQPADMMUnconstrainedLight
+
 
 __all__ = [
     'StandAlone',
@@ -41,6 +43,7 @@ __all__ = [
     'DualDecomposition',
     'DualDecompositionMPI',
     'ExchangeMIQPADMM',
+    'ExchangeMIQPADMMMPI',
     'ExchangeMIQPADMMUnconstrainedLight',
     'algorithm',
     'algorithms',
@@ -57,5 +60,6 @@ algorithms = {
     'dual-decomposition': DualDecomposition,
     'dual-decomposition-mpi': DualDecompositionMPI,
     'exchange-miqp-admm': ExchangeMIQPADMM,
+    'exchange-miqp-admm-mpi': ExchangeMIQPADMMMPI,
     'exchange-miqp-admm-unconstrained-light': ExchangeMIQPADMMUnconstrainedLight,
 }

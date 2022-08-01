@@ -30,7 +30,7 @@ from pyomo.solvers.plugins.solvers.persistent_solver import PersistentSolver
 from pyomo.opt import SolverStatus, TerminationCondition
 
 from pycity_scheduling.classes import CityDistrict, Building
-from pycity_scheduling.exceptions import NonoptimalError, MaxIterationError
+from pycity_scheduling.exceptions import NonoptimalError
 from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
 
 
