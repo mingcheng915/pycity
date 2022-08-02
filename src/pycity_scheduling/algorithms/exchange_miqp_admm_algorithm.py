@@ -99,7 +99,6 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         self.eps_dual_i = eps_dual_i
         self.rho = rho
         self.max_iterations = max_iterations
-        self.iteration_counter = 0
         self.op_horizon = self.city_district.op_horizon
 
         # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
@@ -387,7 +386,6 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
 
     def _iteration(self, results, params, debug):
         super(ExchangeMIQPADMM, self)._iteration(results, params, debug)
-        self.iteration_counter += 1
 
         # fill parameters if not already present
         if "p_el" not in params:
