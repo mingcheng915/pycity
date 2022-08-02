@@ -103,7 +103,6 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         self.eps_dual_i = eps_dual_i
         self.rho = rho
         self.max_iterations = max_iterations
-        self.iteration_counter = 0
         self.op_horizon = self.city_district.op_horizon
 
         # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
@@ -389,13 +388,22 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                     asset_updates[i] = pyomo_var_values
 
             if self.mpi_interface.get_rank() == 0:
+                buffer = np.array([bytearray(10**6) for i in range(1, len(self._entities))])
                 for i in range(1, len(self._entities)):
-                    req = self.mpi_interface.get_comm().irecv(source=self.mpi_process_range[i], tag=i)
+                    req = self.mpi_interface.get_comm().irecv(
+                        buffer[i-1],
+                        source=self.mpi_process_range[i],
+                        tag=(int(results["iterations"][-1])+1) * len(self._entities) + i
+                    )
                     asset_updates[i] = req.wait()
             else:
                 for i in range(1, len(self._entities)):
                     if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
-                        req = self.mpi_interface.get_comm().isend(asset_updates[i], dest=0, tag=i)
+                        req = self.mpi_interface.get_comm().isend(
+                            asset_updates[i],
+                            dest=0,
+                            tag=(int(results["iterations"][-1])+1) * len(self._entities) + i
+                        )
                         req.wait()
                 asset_updates = np.empty(len(self._entities), dtype=np.object)
             asset_updates = self.mpi_interface.get_comm().bcast(asset_updates, root=0)
@@ -464,7 +472,6 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
 
     def _iteration(self, results, params, debug):
         super(ExchangeMIQPADMMMPI, self)._iteration(results, params, debug)
-        self.iteration_counter += 1
 
         # fill parameters if not already present
         if "p_el" not in params:
@@ -571,11 +578,12 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
             if self.mpi_interface.get_rank() == 0:
                 if self.mpi_interface.get_size() > 1:
                     data = np.empty(self.op_horizon, dtype=np.float64)
-                    self.mpi_interface.get_comm().Recv(
+                    req = self.mpi_interface.get_comm().Irecv(
                         data,
                         source=self.mpi_process_range[j],
-                        tag=int(self.iteration_counter) * len(self.mpi_process_range) + j
+                        tag=int(results["iterations"][-1]) * len(self._entities) + j
                     )
+                    req.wait()
                     p_el_schedules[j] = np.array(data, dtype=np.float64)
                 else:
                     p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
@@ -585,11 +593,12 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                     p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
                                                  dtype=np.float64)
                     if self.mpi_interface.get_size() > 1:
-                        self.mpi_interface.get_comm().Send(
+                        req = self.mpi_interface.get_comm().Isend(
                             p_el_schedules[j],
                             dest=0,
-                            tag=int(self.iteration_counter) * len(self.mpi_process_range) + j
+                            tag=int(results["iterations"][-1]) * len(self._entities) + j
                         )
+                        req.wait()
 
         if self.mpi_interface.get_rank() == 0:
             x_ = (-p_el_schedules[0] + sum(p_el_schedules[1:])) / len(self._entities)

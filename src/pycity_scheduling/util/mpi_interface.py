@@ -23,7 +23,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 import os
 import sys
-import functools
+import io
 
 
 class MPIInterface:
@@ -54,10 +54,25 @@ class MPIInterface:
         """
         Turn off printing for all MPI processes with MPI rank other than 0 and always flush prints for rank 0.
         """
+        sys.stdout = UnbufferedPrint(sys.stdout)
+        sys.stderr = UnbufferedPrint(sys.stderr)
         if self.mpi is not None and self.mpi_size > 1:
             if self.mpi_rank > 0:
                 sys.stdout = open(os.devnull, 'w')
                 sys.stderr = open(os.devnull, 'w')
-            else:
-                sys.stdout = os.fdopen(sys.stdout.fileno(), 'a+', 1)
-                sys.stderr = os.fdopen(sys.stderr.fileno(), 'a+', 1)
+
+
+class UnbufferedPrint(object):
+    def __init__(self, stream):
+        self.stream = stream
+
+    def write(self, data):
+        self.stream.write(data)
+        self.stream.flush()
+
+    def writelines(self, data):
+        self.stream.writelines(data)
+        self.stream.flush()
+
+    def __getattr__(self, attr):
+        return getattr(self.stream, attr)

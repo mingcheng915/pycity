@@ -152,13 +152,22 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
                     asset_updates[i] = pyomo_var_values
 
             if self.mpi_interface.get_rank() == 0:
+                buffer = np.array([bytearray(10**6) for i in range(1, len(self._entities))])
                 for i in range(1, len(self._entities)):
-                    req = self.mpi_interface.get_comm().irecv(source=self.mpi_process_range[i], tag=i)
+                    req = self.mpi_interface.get_comm().irecv(
+                        buffer[i-1],
+                        source=self.mpi_process_range[i],
+                        tag=(int(results["iterations"][-1])+1) * len(self._entities) + i
+                    )
                     asset_updates[i] = req.wait()
             else:
                 for i in range(1, len(self._entities)):
                     if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
-                        req = self.mpi_interface.get_comm().isend(asset_updates[i], dest=0, tag=i)
+                        req = self.mpi_interface.get_comm().isend(
+                            asset_updates[i],
+                            dest=0,
+                            tag=(int(results["iterations"][-1])+1) * len(self._entities) + i
+                        )
                         req.wait()
                 asset_updates = np.empty(len(self._entities), dtype=np.object)
             asset_updates = self.mpi_interface.get_comm().bcast(asset_updates, root=0)
@@ -210,8 +219,12 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
             if self.mpi_interface.get_rank() == 0:
                 if self.mpi_interface.get_size() > 1:
                     data = np.empty(self.op_horizon, dtype=np.float64)
-                    self.mpi_interface.get_comm().Recv(data, source=self.mpi_process_range[j],
-                                                       tag=int(results["iterations"][-1]) * len(self._entities) + j)
+                    req = self.mpi_interface.get_comm().Irecv(
+                        data,
+                        source=self.mpi_process_range[j],
+                        tag=int(results["iterations"][-1]) * len(self._entities) + j
+                    )
+                    req.wait()
                     p_el_schedules[j] = np.array(data, dtype=np.float64)
                 else:
                     p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
@@ -221,8 +234,12 @@ class DualDecompositionMPI(IterationAlgorithm, DistributedAlgorithm):
                     p_el_schedules[j] = np.array(extract_pyomo_values(self._entities[j].model.p_el_vars, float),
                                                  dtype=np.float64)
                     if self.mpi_interface.get_size() > 1:
-                        self.mpi_interface.get_comm().Send(p_el_schedules[j], dest=0,
-                                                           tag=int(results["iterations"][-1]) * len(self._entities) + j)
+                        req = self.mpi_interface.get_comm().Isend(
+                            p_el_schedules[j],
+                            dest=0,
+                            tag=int(results["iterations"][-1]) * len(self._entities) + j
+                        )
+                        req.wait()
 
         # ------------------------------------------
         # 2) Calculate incentive signal update
