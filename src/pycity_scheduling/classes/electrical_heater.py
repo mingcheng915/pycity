@@ -66,7 +66,7 @@ class ElectricalHeater(ThermalEntityHeating, ElectricalEntity, eh.ElectricalHeat
           `lower_activation_limit` in `integer` mode.
     """
 
-    def __init__(self, environment, p_th_nom, eta=1, lower_activation_limit=0):
+    def __init__(self, environment, p_th_nom, eta=1, lower_activation_limit=0.5):
         # Flow temperature of 55 C
         super().__init__(environment, p_th_nom*1000, eta, 85, lower_activation_limit)
         self._long_id = "EH_" + self._id_string

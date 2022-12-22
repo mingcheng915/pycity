@@ -69,7 +69,7 @@ class CombinedHeatPower(ThermalEntityHeating, ElectricalEntity, chp.CHP):
           Generates additional constraints for the `lower_activation_limit` in `integer` mode.
     """
 
-    def __init__(self, environment, p_th_nom, p_el_nom=None, eta=1, lower_activation_limit=0):
+    def __init__(self, environment, p_th_nom, p_el_nom=None, eta=1, lower_activation_limit=0.5):
         q_nominal = p_th_nom * 1000
         if p_el_nom is None:
             p_nominal = q_nominal

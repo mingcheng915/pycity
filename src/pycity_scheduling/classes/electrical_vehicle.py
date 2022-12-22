@@ -93,7 +93,6 @@ class ElectricalVehicle(Battery):
                          storage_end_equality=False)
         self._kind = "electricalvehicle"
         self._long_id = "EV_" + self._id_string
-
         self.charging_time_initial = charging_time
         self.ct_pattern = ct_pattern
 

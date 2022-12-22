@@ -81,4 +81,5 @@ class CentralOptimization(OptimizationAlgorithm):
     def _solve(self, results, params, debug):
         self.node.solve(variables=None, debug=debug)
         self._save_time(results, params)
+        results["obj_value"] = pyomo.value(self.node.model.o)
         return

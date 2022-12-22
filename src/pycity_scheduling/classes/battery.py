@@ -141,7 +141,8 @@ class Battery(ElectricalEntity, bat.Battery):
             m.p_el_supply_vars = pyomo.Var(m.t, domain=pyomo.Reals,
                                            bounds=(0.0, np.inf if mode == "integer" else self.p_el_max_discharge),
                                            initialize=0)
-            m.e_el_vars = pyomo.Var(m.t, domain=pyomo.Reals, bounds=(0, self.e_el_max), initialize=0)
+            m.e_el_vars = pyomo.Var(m.t, domain=pyomo.Reals, bounds=(0, self.e_el_max),
+                                    initialize=self.e_el_max*self.soc_init)
 
             def p_rule(model, t):
                 return model.p_el_vars[t] == model.p_el_demand_vars[t] - model.p_el_supply_vars[t]
@@ -158,12 +159,12 @@ class Battery(ElectricalEntity, bat.Battery):
                 return model.e_el_vars[t] == e_el_last + delta
             m.e_constr = pyomo.Constraint(m.t, rule=e_rule)
 
-            def e_end_rule(model):
-                if self.storage_end_equality:
-                    return model.e_el_vars[self.op_horizon-1] == self.e_el_max * self.soc_init
-                else:
-                    return model.e_el_vars[self.op_horizon-1] >= self.e_el_max * self.soc_init
-            m.e_end_constr = pyomo.Constraint(rule=e_end_rule)
+            # Set bounds for the final storage capacity
+            if self.storage_end_equality:
+                m.e_el_vars[self.op_horizon-1].setlb(self.e_el_max * self.soc_init)
+                m.e_el_vars[self.op_horizon-1].setub(self.e_el_max * self.soc_init)
+            else:
+                m.e_el_vars[self.op_horizon - 1].setlb(self.e_el_max * self.soc_init)
 
             if mode == "integer":
                 m.p_state_vars = pyomo.Var(m.t, domain=pyomo.Binary)

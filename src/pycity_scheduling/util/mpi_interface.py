@@ -23,7 +23,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 import os
 import sys
-import io
+import numpy as np
 
 
 class MPIInterface:
@@ -49,6 +49,24 @@ class MPIInterface:
 
     def get_comm(self):
         return self.mpi_comm
+
+    def get_mpi_process_range(self, n):
+        # Determine which MPI processes is responsible for which node(s):
+        if self.get_size() > n:
+            mpi_process_range = np.array([i for i in range(n)])
+        elif self.get_size() < n:
+            if self.get_size() == 1:
+                mpi_process_range = np.array([0 for i in range(n)])
+            else:
+                a, b = divmod(n - 1, self.get_size() - 1)
+                mpi_process_range = np.repeat(np.array([i for i in range(1, self.get_size())]), a)
+                for i in range(b):
+                    mpi_process_range = np.append(mpi_process_range, i + 1)
+                mpi_process_range = np.concatenate([[0], mpi_process_range])
+        else:
+            mpi_process_range = np.array([i for i in range(n)])
+        mpi_process_range = np.sort(mpi_process_range)
+        return mpi_process_range
 
     def disable_multiple_printing(self):
         """

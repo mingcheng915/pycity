@@ -161,11 +161,11 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
         elif mode == "integer":
             self.runtime = self.e_consumption / (self.p_el_nom * self.time_slot)
             rounded_runtime = int(round(self.runtime))
+
             if not np.isclose(self.runtime, rounded_runtime):
                 warn("Consumption of DLs is in integer mode always a multiple of " +
                      "p_el_nom * dt, which is larger than e_consumption.")
             self.runtime = rounded_runtime
-
             if self.runtime > self.op_horizon:
                 warn(
                     ("DeferrableLoad {} is not able to complete its operation in the given op_horizon, " +
@@ -176,7 +176,13 @@ class DeferrableLoad(ElectricalEntity, ed.ElectricalDemand):
             # create binary variables representing if operation begins in timeslot t
             # Since the DL has to finish operation when the op_horizon ends, binary variables representing a too late
             # start can be omitted.
-            m.p_start_vars = pyomo.Var(pyomo.RangeSet(0, self.op_horizon-self.runtime), domain=pyomo.Binary)
+            # m.p_start_vars = pyomo.Var(pyomo.RangeSet(0, self.op_horizon-self.runtime), domain=pyomo.Binary)
+            # add fixed zero values for the start variable to make deferrable loads suitable for ExchangeMIQPADMM
+
+            m.p_start_vars = pyomo.Var(m.t, domain=pyomo.Binary, initialize=0)
+            for i in range(self.op_horizon-self.runtime, self.op_horizon):
+                m.p_start_vars[i].fixed = True
+            # m.p_start_vars.pprint()
 
             # coupling the start variable to the electrical variables following
             def state_coupl_rule(model, t):

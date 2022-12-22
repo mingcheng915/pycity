@@ -23,11 +23,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 
 import numpy as np
-
+import pycity_scheduling.util.mpi_interface as mpi
 from pycity_scheduling.classes import *
 from pycity_scheduling.algorithms import *
 from pycity_scheduling.solvers import *
-
 
 # This is a very simple power scheduling example using the distributed Exchange MIQP ADMM algorithm.
 # It compares the differences of the schedules and the performance of the Exchange MIQP ADMM algorithm in the
@@ -37,6 +36,10 @@ from pycity_scheduling.solvers import *
 
 def main(do_plot=False):
     print("\n\n------ Example 22: Algorithm Exchange-MIQP-ADMM ------\n\n")
+
+    # First, instantiate the MPI interface and disable printing for all MPI processes other than with rank 0.
+    mpi_interface = mpi.MPIInterface()
+    mpi_interface.disable_multiple_printing()
 
     # Define timer, price, weather, and environment objects:
     t = Timer(op_horizon=2, step_size=3600)
@@ -132,26 +135,29 @@ def main(do_plot=False):
 
     # Perform the scheduling with the Exchange MIQP ADMM algorithm and an unconstrained x_update (currently only works
     # with commercial solvers):
+    """
     if DEFAULT_SOLVER is "gurobi_direct" or DEFAULT_SOLVER is "gurobi_persistent" or DEFAULT_SOLVER is "cplex":
-        opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
+        opt = ExchangeMIQPADMMMPI(city_district=cd, mode='integer', x_update_mode='unconstrained', eps_primal=0.001,
                                eps_dual=0.001, eps_primal_i=0.001, eps_dual_i=0.001)
+    """
+    opt = ExchangeMIQPADMM(city_district=cd, mode='integer', x_update_mode='unconstrained', max_iterations=1000,
+                           eps_primal=0.01, eps_dual=0.01, eps_primal_i=0.01, eps_dual_i=0.01)
+    results = opt.solve()
+    cd.copy_schedule("exchange_miqp_admm-unconstrained")
 
-        results = opt.solve()
-        cd.copy_schedule("exchange_miqp_admm-unconstrained")
+    # Print some results:
+    print("")
+    print("")
+    print("Exchange MIQP ADMM, unconstrained x-update - Number of iterations:", results["iterations"][-1])
+    print("")
 
-        # Print some results:
-        print("")
-        print("")
-        print("Exchange MIQP ADMM, unconstrained x-update - Number of iterations:", results["iterations"][-1])
-        print("")
-
-        # Print the building's schedules:
-        print("Schedule building no. one:")
-        print(list(bd1.p_el_schedule))
-        print("Schedule building no. two:")
-        print(list(bd2.p_el_schedule))
-        print("Schedule of the city district:")
-        print(list(cd.p_el_schedule))
+    # Print the building's schedules:
+    print("Schedule building no. one:")
+    print(list(bd1.p_el_schedule))
+    print("Schedule building no. two:")
+    print(list(bd2.p_el_schedule))
+    print("Schedule of the city district:")
+    print(list(cd.p_el_schedule))
     return
 
 

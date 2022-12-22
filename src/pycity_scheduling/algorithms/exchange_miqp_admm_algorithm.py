@@ -88,7 +88,7 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
     """
     def __init__(self, city_district, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS, mode="integer",
                  x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1, eps_dual_i=0.1,
-                 rho=2, max_iterations=10000, robustness=None):
+                 rho=2, max_iterations=10000, robustness=None, fix=True):
         super(ExchangeMIQPADMM, self).__init__(city_district, solver, solver_options, mode)
 
         self.mode = mode
@@ -100,6 +100,8 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         self.rho = rho
         self.max_iterations = max_iterations
         self.op_horizon = self.city_district.op_horizon
+        self.fix = fix
+        self.counter = 0
 
         # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
         self._entities = [entity for entity in self.entities if
@@ -377,6 +379,11 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
         results["r_sub_ave"].append(primal)
         results["s_sub_ave"].append(dual)
 
+        print("exch_primal: ", results["r_norms"][-1])
+        print("exch_dual: ", results["s_norms"][-1])
+        print("sub_primal: ", primal)
+        print("sub_dual:", dual)
+
         # Reaching the stopping criteria
         if results["r_norms"][-1] <= self.eps_primal and results["s_norms"][-1] <= self.eps_dual\
                 and primal <= self.eps_primal_i and dual <= self.eps_dual_i:
@@ -386,6 +393,8 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
 
     def _iteration(self, results, params, debug):
         super(ExchangeMIQPADMM, self)._iteration(results, params, debug)
+        self.counter += 1
+        print("Iteration", self.counter)
 
         # fill parameters if not already present
         if "p_el" not in params:
@@ -472,6 +481,16 @@ class ExchangeMIQPADMM(IterationAlgorithm, DistributedAlgorithm):
 
         # Update all variables and round the binary variables
         self._pi()
+
+        # Fix variables if it is the last iteration
+        if self.counter == self.max_iterations and self.fix == True:
+            to_solve_nodes = []
+            variables = []
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
+                self.variable_list[i].fix_variables()
+                to_solve_nodes.append(node)
+                variables.append([entity.model.p_el_vars[t] for t in range(self.op_horizon)])
+            self._solve_nodes(results, params, to_solve_nodes, variables=variables, debug=debug)
 
         # Calculate all residual norms of subsystems. Norm the residuals by T
         for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
@@ -589,6 +608,13 @@ class Variables:
     def remove_exchange_var(self):
         for time_step in range(self.op_horizon):
             self.x["t_" + str(time_step)] = np.delete(self.get_list(time_step), 0)
+        return
+
+    def fix_variables(self):
+        for time_step in range(self.op_horizon):
+            for x in self.x["t_" + str(time_step)]:
+                x.setlb(x.value)
+                x.setub(x.value)
         return
 
 

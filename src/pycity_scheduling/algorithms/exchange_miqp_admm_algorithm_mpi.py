@@ -22,13 +22,13 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 """
 
 
-import collections
 import numpy as np
 import pyomo.core as pyo_core
 import pyomo.kernel as pmo
 import pyomo.environ as pyomo
+import matplotlib.pyplot as plt
 
-from pycity_scheduling.classes import (CityDistrict, Building, Photovoltaic, WindEnergyConverter)
+from pycity_scheduling.classes import *
 from pycity_scheduling.util import extract_pyomo_values
 from pycity_scheduling.algorithms.algorithm import IterationAlgorithm, DistributedAlgorithm, SolverNode
 from pycity_scheduling.solvers import DEFAULT_SOLVER, DEFAULT_SOLVER_OPTIONS
@@ -91,7 +91,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
     """
     def __init__(self, city_district, mpi_interface, solver=DEFAULT_SOLVER, solver_options=DEFAULT_SOLVER_OPTIONS,
                  mode="integer", x_update_mode='unconstrained', eps_primal=0.1, eps_dual=0.1, eps_primal_i=0.1,
-                 eps_dual_i=0.1, rho=2, max_iterations=10000, robustness=None):
+                 eps_dual_i=0.1, rho=2, max_iterations=10000, robustness=None, fix=True):
         super(ExchangeMIQPADMMMPI, self).__init__(city_district, solver, solver_options, mode)
 
         self.mpi_interface = mpi_interface
@@ -104,6 +104,9 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         self.rho = rho
         self.max_iterations = max_iterations
         self.op_horizon = self.city_district.op_horizon
+        self.fix = fix
+        self.fixed_iter = 0
+        self.counter = 0
 
         # Only consider entities of type CityDistrict, Building, Photovoltaic, WindEnergyConverter
         self._entities = [entity for entity in self.entities if
@@ -388,7 +391,7 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                     asset_updates[i] = pyomo_var_values
 
             if self.mpi_interface.get_rank() == 0:
-                buffer = np.array([bytearray(10**6) for i in range(1, len(self._entities))])
+                buffer = np.array([bytearray(10**7) for i in range(1, len(self._entities))])
                 for i in range(1, len(self._entities)):
                     req = self.mpi_interface.get_comm().irecv(
                         buffer[i-1],
@@ -406,17 +409,28 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                         )
                         req.wait()
                 asset_updates = np.empty(len(self._entities), dtype=np.object)
-            asset_updates = self.mpi_interface.get_comm().bcast(asset_updates, root=0)
 
-            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
-                for asset in entity.get_all_entities():
-                    pyomo_var_values_map = pyomo.ComponentMap()
-                    for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
-                        if str(v) in asset_updates[i]:
-                            pyomo_var_values_map[v] = pyomo.value(asset_updates[i][str(v)])
-                    for var in pyomo_var_values_map:
-                        var.set_value(pyomo_var_values_map[var])
-                    asset.update_schedule()
+            """
+            for i in range(len(self._entities)):
+                if self.mpi_interface.get_rank() == 0:
+                    asset_update = asset_updates[i]
+                else:
+                    asset_update = np.empty(1, dtype=np.object)
+                asset_update = self.mpi_interface.get_comm().bcast(asset_update, root=0)
+                if self.mpi_interface.get_rank() > 0:
+                    asset_updates[i] = asset_update
+            """
+
+            if self.mpi_interface.get_rank() == 0:
+                for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
+                    for asset in entity.get_all_entities():
+                        pyomo_var_values_map = pyomo.ComponentMap()
+                        for v in asset.model.component_data_objects(ctype=pyomo.Var, descend_into=True):
+                            if str(v) in asset_updates[i]:
+                                pyomo_var_values_map[v] = pyomo.value(asset_updates[i][str(v)])
+                        for var in pyomo_var_values_map:
+                            var.set_value(pyomo_var_values_map[var])
+                        asset.update_schedule()
         else:
             super()._postsolve(results, params, debug)
         return
@@ -470,8 +484,95 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
 
         return
 
+    def debug(self, node):
+        hp_c = 0
+        eh_c = 0
+        chp_c = 0
+        bat_c = 0
+        for en in node.get_entities():
+            if isinstance(en, HeatPump) and hp_c == 0:
+                en.model.p_th_heat_state_vars[0].pprint()
+                hp_c += 1
+            if isinstance(en, ElectricalHeater) and eh_c == 0:
+                en.model.p_th_heat_state_vars[0].pprint()
+                eh_c += 1
+            if isinstance(en, CombinedHeatPower) and chp_c == 0:
+                en.model.p_th_heat_state_vars[0].pprint()
+                chp_c += 1
+            if isinstance(en, Battery) and bat_c == 0:
+                en.model.p_state_vars[0].pprint()
+                bat_c += 1
+
+    def _get_constraints_for_count(self):
+        equality_list = []
+        inequality_list = []
+        counter = 0
+        for en in self.city_district.get_all_entities():
+            for constraint in en.model.component_objects(pyomo.Constraint):
+                counter +=1
+                for index in constraint:
+                    # check if the constraint is an equality constraint and write it in the form Ax-b=0
+                    if pyomo.value(constraint[index].lower) == pyomo.value(constraint[index].upper):
+                        expr = constraint[index].body - constraint[index].lower
+                        equality_list.append([constraint, expr])
+
+                    # if the constraint is not an equality constraint it has to be an inequality constraint
+                    # the next three checks are about to write that constraint in the form Cx-d >= 0
+                    elif pyomo.value(constraint[index].upper) is None:
+                        expr = constraint[index].body - constraint[index].lower
+                        inequality_list.append([constraint, expr])
+
+                    elif pyomo.value(constraint[index].lower) is None:
+                        expr = -constraint[index].body + constraint[index].upper
+                        inequality_list.append([constraint, expr])
+
+                    else:
+                        expr = -constraint[index].body + constraint[index].upper
+                        inequality_list.append([constraint, expr])
+                        expr = constraint[index].body - constraint[index].lower
+                        inequality_list.append([constraint, expr])
+        print("Equal: ", len(equality_list))
+        print("Inequal: ", len(inequality_list))
+        print("Gesamt: ", counter)
+
+        return equality_list, inequality_list
+
+    def _penultimate_iteration(self, results):
+        print("------------------Penultimate Iteration-------------------")
+        print("Objective Value: ", results["obj_value"][-1])
+        plt.figure(2)
+        plt.plot(results["obj_value"])
+        plt.ylabel("Objetive value")
+        plt.title("Objetive Value")
+        plt.savefig('penultimate_obj_value.png')
+
+        equality_list, inequality_list = self._get_constraints_for_count()
+        equality_counter = 0
+        inequality_counter = 0
+        # check if constraints are violated. Allow a numerical tolerance of 1e-3 which equals 1 Watt in the application
+        for i in range(len(equality_list)):
+            if abs(0-pyomo.value(equality_list[i][1])) > 1e-2:
+                print("Equality violation: ", equality_list[i][0])
+                print(equality_list[i][1], "   ", pyomo.value(equality_list[i][1]))
+                print("")
+                equality_counter += 1
+        for i in range(len(inequality_list)):
+            if pyomo.value(inequality_list[i][1]) < -1e-2:
+                inequality_counter += 1
+                print("Inequality violation: ", inequality_list[i][0])
+                print(inequality_list[i][1], "   ", pyomo.value(inequality_list[i][1]))
+                print("")
+
+        print("Number of inequality constraints:", len(inequality_list)," Number of violations: ", inequality_counter)
+        print("Number of equality constraints:", len(equality_list)," Number of violations: ", equality_counter)
+
+        return inequality_counter + equality_counter
+
+
     def _iteration(self, results, params, debug):
         super(ExchangeMIQPADMMMPI, self)._iteration(results, params, debug)
+        self.counter += 1
+        print("Iteration", self.counter)
 
         # fill parameters if not already present
         if "p_el" not in params:
@@ -562,6 +663,15 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         # Update all variables and round the binary variables
         self._pi()
 
+        if self.counter==self.max_iterations and self.fix==True:
+            to_solve_nodes = []
+            variables = []
+            for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
+                if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
+                    self.variable_list[i].fix_variables()
+                    to_solve_nodes.append(node)
+                    variables.append([entity.model.p_el_vars[t] for t in range(self.op_horizon)])
+            self._solve_nodes(results, params, to_solve_nodes, variables=variables, debug=debug)
         # Calculate all residual norms of subsystems. Norm the residuals by T
         for i, node, entity in zip(range(len(self._entities)), self.nodes, self._entities):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
@@ -569,7 +679,6 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                 primal = primal / self.op_horizon
                 results["r_i_norms_" + str(i)].append(primal)
                 results["s_i_norms_" + str(i)].append(self.dual_residual(i, node))
-
         # exchange dual update
         if self.mpi_interface.get_rank() == 0:
             p_el_schedules[0] = np.array(extract_pyomo_values(self.city_district.model.p_el_vars, float),
@@ -599,7 +708,6 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
                             tag=int(results["iterations"][-1]) * len(self._entities) + j
                         )
                         req.wait()
-
         if self.mpi_interface.get_rank() == 0:
             x_ = (-p_el_schedules[0] + sum(p_el_schedules[1:])) / len(self._entities)
             u += x_
@@ -611,7 +719,6 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
             self.mpi_interface.get_comm().Bcast(x_, root=0)
             self.mpi_interface.get_comm().Bcast(u, root=0)
             self.mpi_interface.get_comm().Bcast(p_el_schedules, root=0)
-
         # ------------------------------------------
         # 3) Calculate parameters for stopping criteria
         # ------------------------------------------
@@ -627,12 +734,12 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         else:
             r_norm = np.empty(1, dtype=np.float64)
             s_norm = np.empty(1, dtype=np.float64)
+
         if self.mpi_interface.get_size() > 1:
             self.mpi_interface.get_comm().Bcast(r_norm, root=0)
             self.mpi_interface.get_comm().Bcast(s_norm, root=0)
         results["r_norms"].append(r_norm[0])
         results["s_norms"].append(s_norm[0])
-
         # store the objective value
         obj = self._get_objective()
         results["obj_value"] = np.append(results["obj_value"], obj)
@@ -641,11 +748,17 @@ class ExchangeMIQPADMMMPI(IterationAlgorithm, DistributedAlgorithm):
         params["p_el"] = p_el_schedules
         params["x_"] = x_
         params["u"] = u
+
         for i in range(len(self._entities)):
             if self.mpi_interface.get_rank() == self.mpi_process_range[i]:
                 params["x_bin_" + str(i)] = self.variable_list[i].get_initial_data()
 
         results["schedule"] = p_el_schedules[0]
+
+        if self.mpi_interface.get_rank() == 0:
+            if self.counter == self.max_iterations-1 or self.max_iterations== self.counter:
+                self.fixed_iter = self._penultimate_iteration(results)
+                print(self.fixed_iter)
         return
 
 
@@ -725,6 +838,20 @@ class Variables:
     def remove_exchange_var(self):
         for time_step in range(self.op_horizon):
             self.x["t_" + str(time_step)] = np.delete(self.get_list(time_step), 0)
+        return
+
+    def fix_variables(self):
+        for time_step in range(self.op_horizon):
+            for x in self.x["t_" + str(time_step)]:
+                x.setlb(x.value)
+                x.setub(x.value)
+        return
+
+    def print_variables(self):
+        for time_step in range(self.op_horizon):
+            for x in self.x["t_" + str(time_step)]:
+                print(x)
+                print(x.value)
         return
 
 
@@ -828,4 +955,3 @@ class Constraints:
             if v_k_plus_1[j] <= 0:
                 v_k_plus_1[j] = 0
         return v_k_plus_1
-

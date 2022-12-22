@@ -79,7 +79,7 @@ class CityDistrict(ElectricalEntity, cd.CityDistrict):
         """
         super().populate_model(model, mode)
         m = self.model
-
+        
         if mode in ["convex", "integer"]:
             m.p_el_vars.setlb(None)
         else:
